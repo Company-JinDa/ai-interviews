@@ -153,14 +153,15 @@ export default function MockTestPage() {
           {["IT", "Language English", "Business Administration"].map((cat) => (
             <Button
               key={cat}
-              variant={filter === cat ? "solid" : "outline"}
+              variant="outline"
               colorScheme="teal"
-              onClick={() => setFilter(cat)}
+              onClick={() => router.push("/components/mocktest1")}
             >
               {cat}
             </Button>
           ))}
         </Flex>
+
 
         <Flex direction="column" align="center" mt={10}>
           <Flex align="center" mb={6} w="full" justify="center">
