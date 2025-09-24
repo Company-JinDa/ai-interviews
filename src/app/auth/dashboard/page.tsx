@@ -13,16 +13,18 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  Icon,
   Select,
 } from "@chakra-ui/react"
 import { ChevronDownIcon } from "@chakra-ui/icons"
-import { FaHome, FaBicycle, FaRegFileAlt, FaUser, FaGlobe } from "react-icons/fa"  // thêm icon
+import { FaHome, FaBicycle, FaRegFileAlt, FaUser, FaGlobe } from "react-icons/fa"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auth } from "@/app/lib/firebase"
 import { signOut } from "firebase/auth"
 import { useEffect, useState } from "react"
+
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
 
 const generateData = (year: number) => {
   const data: Record<string, boolean> = {}
@@ -39,7 +41,10 @@ export default function DashboardPage() {
   const router = useRouter()
   const [year, setYear] = useState<number>(2025)
   const [contributions, setContributions] = useState<Record<string, boolean>>({})
-  const [lang, setLang] = useState<"en" | "vi">("en") // state ngôn ngữ
+
+  // 🔹 Lấy lang từ context
+  const { lang, toggleLang } = useLang()
+  const t = translations[lang]
 
   useEffect(() => {
     setContributions(generateData(year))
@@ -49,15 +54,6 @@ export default function DashboardPage() {
     await signOut(auth)
     router.push("/auth/login")
   }
-
-  const toggleLang = () => {
-    setLang((prev) => (prev === "en" ? "vi" : "en"))
-  }
-
-  const months =
-    lang === "en"
-      ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-      : ["Th1", "Th2", "Th3", "Th4", "Th5", "Th6", "Th7", "Th8", "Th9", "Th10", "Th11", "Th12"]
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
@@ -88,7 +84,7 @@ export default function DashboardPage() {
             w="full"
             color="blue.500"
           >
-            {lang === "en" ? "Home" : "Trang chủ"}
+            {t.home}
           </Button>
           <Button
             as={Link}
@@ -98,7 +94,7 @@ export default function DashboardPage() {
             justifyContent="flex-start"
             w="full"
           >
-            {lang === "en" ? "Specialized Practice" : "Luyện chuyên đề"}
+            {t.specialized}
           </Button>
           <Button
             as={Link}
@@ -108,7 +104,7 @@ export default function DashboardPage() {
             justifyContent="flex-start"
             w="full"
           >
-            {lang === "en" ? "Mock Test" : "Thi thử"}
+            {t.mocktest}
           </Button>
         </VStack>
 
@@ -120,7 +116,7 @@ export default function DashboardPage() {
           w="full"
           mb={2}
         >
-          {lang === "en" ? "Premium Package Company" : "Gói Premium cho công ty"}
+          {t.premium}
         </Button>
 
         <Box>
@@ -132,15 +128,13 @@ export default function DashboardPage() {
               w="full"
               justifyContent="space-between"
             >
-              {lang === "en" ? "Account" : "Tài khoản"}
+              {t.account}
             </MenuButton>
             <MenuList>
               <MenuItem as={Link} href="/components/profile">
-                {lang === "en" ? "Profile" : "Hồ sơ"}
+                {t.profile}
               </MenuItem>
-              <MenuItem onClick={handleLogout}>
-                {lang === "en" ? "Log out" : "Đăng xuất"}
-              </MenuItem>
+              <MenuItem onClick={handleLogout}>{t.logout}</MenuItem>
             </MenuList>
           </Menu>
         </Box>
@@ -151,15 +145,9 @@ export default function DashboardPage() {
         <Flex justify="space-between" align="start" mb={8}>
           <Box maxW="lg">
             <Text fontSize="2xl" fontWeight="bold" mb={2}>
-              {lang === "en"
-                ? "Practice Mock Interview Everyday"
-                : "Luyện phỏng vấn thử mỗi ngày"}
+              {t.practiceTitle}
             </Text>
-            <Text color="gray.600">
-              {lang === "en"
-                ? "Regularly practicing your subject automatically increases your speed and improves your interview performance."
-                : "Việc luyện tập thường xuyên sẽ giúp bạn tăng tốc độ và cải thiện kết quả phỏng vấn."}
-            </Text>
+            <Text color="gray.600">{t.practiceDesc}</Text>
           </Box>
 
           <Box>
@@ -176,17 +164,13 @@ export default function DashboardPage() {
               </Select>
 
               {/* Nút chuyển ngôn ngữ */}
-              <Button
-                size="sm"
-                leftIcon={<FaGlobe />}
-                onClick={toggleLang}
-              >
+              <Button size="sm" leftIcon={<FaGlobe />} onClick={toggleLang}>
                 {lang === "en" ? "EN" : "VI"}
               </Button>
             </Flex>
 
             <Flex direction="row" gap={2}>
-              {months.map((month, mIdx) => (
+              {t.months.map((month: string, mIdx: number) => (
                 <Box key={mIdx}>
                   <Text fontSize="xs" mb={1} textAlign="center">
                     {month}
@@ -218,11 +202,12 @@ export default function DashboardPage() {
           </Box>
         </Flex>
 
+        {/* Features */}
         <Flex direction="column" align="center" mt={150}>
           <Flex align="center" mb={65} w="full" justify="center">
             <Divider flex="1" borderWidth="2px" />
             <Text mx={3} fontSize="lg" fontWeight="bold" whiteSpace="nowrap">
-              {lang === "en" ? "Feature" : "Tính năng"}
+              {t.feature}
             </Text>
             <Divider flex="1" borderWidth="2px" />
           </Flex>

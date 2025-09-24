@@ -1,5 +1,5 @@
 "use client"
-import { createContext, useContext, useState, ReactNode } from "react"
+import { createContext, useContext, useState, ReactNode, useEffect } from "react"
 
 type Lang = "en" | "vi"
 
@@ -13,8 +13,20 @@ const LangContext = createContext<LangContextType | undefined>(undefined)
 export const LangProvider = ({ children }: { children: ReactNode }) => {
   const [lang, setLang] = useState<Lang>("en")
 
+  // 🔹 Khi component mount, đọc từ localStorage
+  useEffect(() => {
+    const savedLang = localStorage.getItem("lang") as Lang | null
+    if (savedLang) {
+      setLang(savedLang)
+    }
+  }, [])
+
   const toggleLang = () => {
-    setLang((prev) => (prev === "en" ? "vi" : "en"))
+    setLang((prev) => {
+      const newLang = prev === "en" ? "vi" : "en"
+      localStorage.setItem("lang", newLang) // 🔹 Lưu vào localStorage
+      return newLang
+    })
   }
 
   return (

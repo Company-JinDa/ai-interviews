@@ -12,6 +12,14 @@ export const translations = {
       "Regularly practicing your subject automatically increases your speed and improves your interview performance.",
     feature: "Feature",
     months: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+
+    // MockTest
+    mocktestTitle: "Mock Test",
+    mocktestDesc:
+      "Take a mock interview and get score estimates, corrections, and improvement guidance.",
+    categories: ["IT", "English Language", "Business Administration"],
+    mockHistory: "Mock History",
+    noTests: "There are no new tests yet.",
   },
   vi: {
     home: "Trang chủ",
@@ -26,5 +34,13 @@ export const translations = {
       "Việc luyện tập thường xuyên sẽ giúp bạn tăng tốc độ và cải thiện kết quả phỏng vấn.",
     feature: "Tính năng",
     months: ["Th1","Th2","Th3","Th4","Th5","Th6","Th7","Th8","Th9","Th10","Th11","Th12"],
-  }
+
+    // MockTest
+    mocktestTitle: "Thi thử",
+    mocktestDesc:
+      "Tham gia phỏng vấn thử để nhận điểm số, góp ý và hướng dẫn cải thiện.",
+    categories: ["CNTT", "Tiếng Anh", "Quản trị kinh doanh"],
+    mockHistory: "Lịch sử thi thử",
+    noTests: "Chưa có bài thi nào.",
+  },
 }
