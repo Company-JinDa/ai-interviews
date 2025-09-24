@@ -10,9 +10,13 @@ import {
   Button,
 } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
 
 export default function PackageCompany() {
   const router = useRouter()
+  const { lang } = useLang()
+  const t = translations[lang]
 
   return (
     <Flex
@@ -49,28 +53,19 @@ export default function PackageCompany() {
         textAlign="center"
       >
         <Text fontSize="xl" fontWeight="bold" mb={2}>
-          What's cool?
+          {t.packageCompanyTitle}
         </Text>
         <Text mb={4} color="gray.600">
-          Company*****@Gmail.com
+          {t.packageCompanyEmail}
         </Text>
 
         <VStack spacing={3} align="start">
-          <HStack>
-            <Text fontSize="2xl" color="green.500">✔</Text>
-            <Text>
-              Create all company specific questions, and have them regularly
-              edited and updated by the company.
-            </Text>
-          </HStack>
-
-          <HStack>
-            <Text fontSize="2xl" color="green.500">✔</Text>
-            <Text>
-              The company reserves the right to add the candidate&apos;s email
-              to the qualifying interview.
-            </Text>
-          </HStack>
+          {t.packageCompanyFeatures.map((feature: string, idx: number) => (
+            <HStack key={idx} align="start">
+              <Text fontSize="2xl" color="green.500">✔</Text>
+              <Text>{feature}</Text>
+            </HStack>
+          ))}
         </VStack>
       </Box>
 
@@ -85,20 +80,20 @@ export default function PackageCompany() {
           borderRadius="md"
         >
           <Text fontWeight="bold" fontSize="lg" color="blue.700">
-            3 Month
+            {t.packages.threeMonth.title}
           </Text>
           <Text fontSize="sm" color="gray.600" mb={2}>
-            (90 days)
+            {t.packages.threeMonth.days}
           </Text>
           <Text fontSize="2xl" fontWeight="bold" mb={4}>
-            $1000
+            {t.packages.threeMonth.price}
           </Text>
           <Button
             colorScheme="blue"
             w="full"
             onClick={() => router.push("/purchase")}
           >
-            Buy Vip
+            {t.packages.buyVip}
           </Button>
         </Box>
 
@@ -111,20 +106,20 @@ export default function PackageCompany() {
           borderRadius="md"
         >
           <Text fontWeight="bold" fontSize="lg" color="blue.700">
-            6 Month
+            {t.packages.sixMonth.title}
           </Text>
           <Text fontSize="sm" color="gray.600" mb={2}>
-            (180 days)
+            {t.packages.sixMonth.days}
           </Text>
           <Text fontSize="2xl" fontWeight="bold" mb={4}>
-            $1850
+            {t.packages.sixMonth.price}
           </Text>
           <Button
             colorScheme="blue"
             w="full"
             onClick={() => router.push("/purchase")}
           >
-            Buy Vip
+            {t.packages.buyVip}
           </Button>
         </Box>
       </Flex>

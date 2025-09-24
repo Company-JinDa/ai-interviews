@@ -23,10 +23,16 @@ import { signOut } from "firebase/auth"
 import { collection, query, getDocs } from "firebase/firestore"
 import { useEffect, useState } from "react"
 
-export default function MockTestPage() {
+// import i18n
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
+
+export default function SpecializedPracticePage() {
   const router = useRouter()
   const [history, setHistory] = useState<any[]>([])
   const [filter, setFilter] = useState<string>("IT")
+  const { lang } = useLang()
+  const t = translations[lang]
 
   const handleLogout = async () => {
     await signOut(auth)
@@ -75,7 +81,7 @@ export default function MockTestPage() {
             justifyContent="flex-start"
             w="full"
           >
-            Home
+            {t.home}
           </Button>
           <Button
             as={Link}
@@ -86,7 +92,7 @@ export default function MockTestPage() {
             w="full"
             color="blue.500"
           >
-            Specialized Practice
+            {t.specialized}
           </Button>
           <Button
             as={Link}
@@ -96,7 +102,7 @@ export default function MockTestPage() {
             justifyContent="flex-start"
             w="full"
           >
-            Mock Test
+            {t.mocktest}
           </Button>
         </VStack>
 
@@ -108,73 +114,65 @@ export default function MockTestPage() {
           w="full"
           mb={2}
         >
-          Premium Package Company
+          {t.premium}
         </Button>
 
         <Box>
           <Menu>
-            <MenuButton
-              as={Button}
-              leftIcon={<FaUser />}
-              rightIcon={<ChevronDownIcon />}
-              w="full"
-              justifyContent="space-between"
-            >
-              Account
+            <MenuButton as={Button} leftIcon={<FaUser />} rightIcon={<ChevronDownIcon />} w="full">
+              {t.account}
             </MenuButton>
             <MenuList>
               <MenuItem as={Link} href="/components/profile">
-                Profile
+                {t.profile}
               </MenuItem>
-              <MenuItem onClick={handleLogout}>Log out</MenuItem>
+              <MenuItem onClick={handleLogout}>{t.logout}</MenuItem>
             </MenuList>
           </Menu>
         </Box>
       </Box>
 
+      {/* Main */}
       <Box flex="1" p={6} bg="gray.100" overflow="auto">
         <Flex justify="space-between" align="center" mb={10}>
           <Box maxW="lg">
             <Text fontSize="2xl" fontWeight="bold" mb={2}>
-              Specialized Practice
+              {t.specializedTitle}
             </Text>
-            <Text color="gray.600">
-              Practice answering questions in any subject, get feedback, scores and guidance to improve better.
-            </Text>
+            <Text color="gray.600">{t.specializedDesc}</Text>
           </Box>
-          <Image
-            src="/p1.png" 
-            alt="Mock Test"
-            boxSize="300px"
-            objectFit="contain"
-          />
+          <Image src="/m1.png" alt="Mock Test" boxSize="300px" objectFit="contain" />
         </Flex>
 
+        {/* Categories */}
         <Flex justify="center" gap={6} mb={10}>
-          {["IT", "Language English", "Business Administration"].map((cat) => (
+          {t.categories.map((cat: string, idx: number) => (
             <Button
-              key={cat}
-              variant={filter === cat ? "solid" : "outline"}
+              key={idx}
+              variant="outline"
               colorScheme="teal"
-              onClick={() => setFilter(cat)}
+              onClick={() => {
+                setFilter(cat)
+                router.push("/components/mocktest1")
+              }}
             >
               {cat}
             </Button>
           ))}
         </Flex>
 
-        {/* Practice history */}
+        {/* History */}
         <Flex direction="column" align="center" mt={10}>
           <Flex align="center" mb={6} w="full" justify="center">
             <Divider flex="1" borderWidth="1px" />
             <Text mx={3} fontSize="lg" fontWeight="bold" whiteSpace="nowrap">
-              Practice history
+              {t.practiceHistory}
             </Text>
             <Divider flex="1" borderWidth="1px" />
           </Flex>
 
           {history.filter((item) => item.category === filter).length === 0 ? (
-            <Text color="gray.500">There are no new tests yet.</Text>
+            <Text color="gray.500">{t.noTests}</Text>
           ) : (
             <VStack w="full" spacing={4} align="stretch">
               {history
