@@ -15,13 +15,25 @@ export const translations = {
       "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"
     ],
 
-    // MockTest
+    // MockTest (list page)
     mocktestTitle: "Mock Test",
     mocktestDesc:
       "Take a mock interview and get score estimates, corrections, and improvement guidance.",
     categories: ["IT", "English Language", "Business Administration"],
     mockHistory: "Mock History",
     noTests: "There are no new tests yet.",
+
+    // MockTest1 (detail page)
+    mocktest1Title: "Test IT - Take the test, get results and fix errors",
+    mocktest1Desc:
+      "Customize your test source, voice reference and start practicing like a real test.",
+    questionSource: "Question source",
+    voiceReference: "Voice reference",
+    browserNote: "*Use Google Chrome or Microsoft Edge browser for better stability.",
+    benefit1: "Get used to the test structure and pressure like the real test.",
+    benefit2: "Get detailed results and fixes.",
+    benefit3: "Upgrade for unlimited use",
+    buyVip: "Buy Vip",
 
     // Specialized
     specializedTitle: "Specialized Practice",
@@ -67,13 +79,25 @@ export const translations = {
       "Th1","Th2","Th3","Th4","Th5","Th6","Th7","Th8","Th9","Th10","Th11","Th12"
     ],
 
-    // MockTest
+    // MockTest (list page)
     mocktestTitle: "Thi thử",
     mocktestDesc:
       "Tham gia phỏng vấn thử để nhận điểm số, góp ý và hướng dẫn cải thiện.",
     categories: ["CNTT", "Tiếng Anh", "Quản trị kinh doanh"],
     mockHistory: "Lịch sử thi thử",
     noTests: "Chưa có bài thi nào.",
+
+    // MockTest1 (detail page)
+    mocktest1Title: "Kiểm tra IT - Làm bài, nhận kết quả và sửa lỗi",
+    mocktest1Desc:
+      "Tùy chỉnh nguồn câu hỏi, giọng đọc và bắt đầu luyện tập như thi thật.",
+    questionSource: "Nguồn câu hỏi",
+    voiceReference: "Tham chiếu giọng nói",
+    browserNote: "*Hãy dùng trình duyệt Google Chrome hoặc Microsoft Edge để ổn định hơn.",
+    benefit1: "Làm quen với cấu trúc và áp lực như bài thi thật.",
+    benefit2: "Nhận kết quả chi tiết và cách sửa lỗi.",
+    benefit3: "Nâng cấp để sử dụng không giới hạn.",
+    buyVip: "Mua Vip",
 
     // Specialized
     specializedTitle: "Luyện tập chuyên ngành",
@@ -101,6 +125,5 @@ export const translations = {
       },
       buyVip: "Mua Vip"
     }
-    
   }
 }

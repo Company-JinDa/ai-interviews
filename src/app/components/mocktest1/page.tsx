@@ -11,9 +11,13 @@ import {
   Select,
 } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
 
 export default function MockTest1() {
   const router = useRouter()
+  const { lang } = useLang()
+  const t = translations[lang] // chọn EN hoặc VI
 
   return (
     <Flex
@@ -49,7 +53,7 @@ export default function MockTest1() {
         textAlign="left"
       >
         <Text fontSize="lg" fontWeight="bold" textAlign="center" mb={6}>
-          Test IT - Take the test, get results and fix errors
+          {t.mocktest1Title}
         </Text>
 
         <Flex justify="space-between" gap={10}>
@@ -57,7 +61,7 @@ export default function MockTest1() {
           <VStack align="start" spacing={4} flex="1">
             <Box>
               <Text fontWeight="bold" mb={2}>
-                Question source
+                {t.questionSource}
               </Text>
               <Select defaultValue="stackoverflow" w="250px">
                 <option value="stackoverflow">Stack Overflow</option>
@@ -68,7 +72,7 @@ export default function MockTest1() {
 
             <Box>
               <Text fontWeight="bold" mb={2}>
-                Voice reference
+                {t.voiceReference}
               </Text>
               <Select defaultValue="asteria" w="250px">
                 <option value="asteria">Asteria (Female-US)</option>
@@ -77,7 +81,7 @@ export default function MockTest1() {
             </Box>
 
             <Text fontSize="sm" color="gray.600" mt={4}>
-              *Use Google Chrome or Microsoft Edge browser for better stability.
+              {t.browserNote}
             </Text>
           </VStack>
 
@@ -87,23 +91,21 @@ export default function MockTest1() {
               <Text fontSize="2xl" color="green.500">
                 ✔
               </Text>
-              <Text>
-                Get used to the test structure and pressure like the real test.
-              </Text>
+              <Text>{t.benefit1}</Text>
             </HStack>
 
             <HStack>
               <Text fontSize="2xl" color="green.500">
                 ✔
               </Text>
-              <Text>Get detailed results and fixes.</Text>
+              <Text>{t.benefit2}</Text>
             </HStack>
 
             <HStack>
               <Text fontSize="2xl" color="green.500">
                 ✔
               </Text>
-              <Text>Upgrade for unlimited use</Text>
+              <Text>{t.benefit3}</Text>
             </HStack>
           </VStack>
         </Flex>
@@ -117,7 +119,7 @@ export default function MockTest1() {
             variant="outline"
             onClick={() => router.push("/components/mocktest2")}
           >
-            Buy Vip
+            {t.buyVip}
           </Button>
         </Flex>
       </Box>
