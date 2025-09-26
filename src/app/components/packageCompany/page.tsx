@@ -10,7 +10,7 @@ export default function PurchaseCompany() {
   useEffect(() => {
     const createOrder = async () => {
       const res = await fetch("/api/sepay/create-order", {
-        method: "POST",
+        method: "get",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount: 255000,
