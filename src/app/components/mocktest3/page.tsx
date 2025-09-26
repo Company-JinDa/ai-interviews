@@ -4,15 +4,20 @@ import {
   Box,
   Flex,
   Text,
+  VStack,
   HStack,
   Image,
   Button,
   Select,
 } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
 
 export default function MockTest3() {
   const router = useRouter()
+  const { lang } = useLang()
+  const t = translations[lang]
 
   return (
     <Flex
@@ -51,56 +56,47 @@ export default function MockTest3() {
         {/* Left Section */}
         <Box flex="1">
           <Text fontSize="lg" fontWeight="bold" mb={6} textAlign="center">
-            Test IT - Take the test, get results and fix errors
+            {t.mocktest3.title}
           </Text>
 
           <Box mb={6}>
             <Text fontWeight="semibold" mb={1}>
-              Question source
+              {t.mocktest3.questionSource}
             </Text>
-            <Select defaultValue="Stack Overflow">
-              <option>Stack Overflow</option>
+            {/* Ví dụ hardcode tạm thời vì translations chưa có sources */}
+            <Select defaultValue="StackOverflow">
+              <option>StackOverflow</option>
               <option>LeetCode</option>
-              <option>HackerRank</option>
+              <option>GeeksForGeeks</option>
             </Select>
           </Box>
 
           <Box mb={6}>
             <Text fontWeight="semibold" mb={1}>
-              Voice reference
+              {t.mocktest3.voiceReference}
             </Text>
-            <Select defaultValue="Asteria (Female-US)">
-              <option>Asteria (Female-US)</option>
-              <option>Nova (Male-UK)</option>
-              <option>Luna (Female-AU)</option>
+            {/* Ví dụ hardcode tạm thời vì translations chưa có voices */}
+            <Select defaultValue="AI Voice 1">
+              <option>AI Voice 1</option>
+              <option>AI Voice 2</option>
             </Select>
           </Box>
 
           <Text fontSize="sm" color="gray.600">
-            *Use Google Chrome or Microsoft Edge browser for better stability.
+            {t.mocktest3.browserNote}
           </Text>
         </Box>
 
         {/* Right Section */}
         <Box flex="1" pl={8}>
-          <HStack align="start" mb={4}>
-            <Text fontSize="2xl" color="green.500">
-              ✔
-            </Text>
-            <Text>Get used to the test structure and pressure like the real test.</Text>
-          </HStack>
-          <HStack align="start" mb={4}>
-            <Text fontSize="2xl" color="green.500">
-              ✔
-            </Text>
-            <Text>Get detailed results and fixes.</Text>
-          </HStack>
-          <HStack align="start">
-            <Text fontSize="2xl" color="green.500">
-              ✔
-            </Text>
-            <Text>Upgrade for unlimited use</Text>
-          </HStack>
+          <VStack align="start" spacing={4}>
+            {t.mocktest3.benefits.map((b: string, i: number) => (
+              <HStack key={i} align="start">
+                <Text fontSize="2xl" color="green.500">✔</Text>
+                <Text>{b}</Text>
+              </HStack>
+            ))}
+          </VStack>
         </Box>
       </Flex>
 
@@ -115,7 +111,7 @@ export default function MockTest3() {
           h="60px"
           onClick={() => router.push("/auth/dashboard")}
         >
-          Exits
+          {t.mocktest3.exits}
         </Button>
 
         <Button
@@ -127,7 +123,7 @@ export default function MockTest3() {
           h="60px"
           onClick={() => router.push("/components/mocktest4")}
         >
-          Start
+          {t.mocktest3.start}
         </Button>
       </Flex>
     </Flex>

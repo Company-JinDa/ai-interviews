@@ -66,6 +66,21 @@ export const translations = {
       }
     },
 
+    // MockTest3 (start page)
+    mocktest3: {
+      title: "Test IT - Take the test, get results and fix errors",
+      questionSource: "Question source",
+      voiceReference: "Voice reference",
+      browserNote: "*Use Google Chrome or Microsoft Edge browser for better stability.",
+      benefits: [
+        "Get used to the test structure and pressure like the real test.",
+        "Get detailed results and fixes.",
+        "Upgrade for unlimited use"
+      ],
+      exits: "Exits",
+      start: "Start"
+    },
+
     // Specialized
     specializedTitle: "Specialized Practice",
     specializedDesc:
@@ -159,6 +174,21 @@ export const translations = {
           perMonth: "80k/tháng"
         }
       }
+    },
+
+    // MockTest3 (start page)
+    mocktest3: {
+      title: "Kiểm tra IT - Làm bài, nhận kết quả và sửa lỗi",
+      questionSource: "Nguồn câu hỏi",
+      voiceReference: "Tham chiếu giọng nói",
+      browserNote: "*Hãy dùng trình duyệt Google Chrome hoặc Microsoft Edge để ổn định hơn.",
+      benefits: [
+        "Làm quen với cấu trúc và áp lực như bài thi thật.",
+        "Nhận kết quả chi tiết và cách sửa lỗi.",
+        "Nâng cấp để sử dụng không giới hạn."
+      ],
+      exits: "Thoát",
+      start: "Bắt đầu"
     },
 
     // Specialized
