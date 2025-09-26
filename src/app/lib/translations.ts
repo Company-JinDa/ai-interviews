@@ -35,6 +35,37 @@ export const translations = {
     benefit3: "Upgrade for unlimited use",
     buyVip: "Buy Vip",
 
+    // MockTest2 (package page)
+    mocktest2: {
+      title: "What's cool?",
+      email: "(datng*****@gmail.com)",
+      features: [
+        "Suitable for businesses surveying candidates",
+        "Talking is tiring :)",
+        "Upgrade for unlimited use"
+      ],
+      packages: {
+        oneMonth: {
+          title: "1 Month",
+          days: "(30 days)",
+          price: "99.000 VNĐ",
+          perMonth: "99k/month"
+        },
+        threeMonth: {
+          title: "3 Month",
+          days: "(90 days)",
+          price: "270.000 VNĐ",
+          perMonth: "90k/month"
+        },
+        sixMonth: {
+          title: "6 Month",
+          days: "(180 days)",
+          price: "480.000 VNĐ",
+          perMonth: "80k/month"
+        }
+      }
+    },
+
     // Specialized
     specializedTitle: "Specialized Practice",
     specializedDesc:
@@ -98,6 +129,37 @@ export const translations = {
     benefit2: "Nhận kết quả chi tiết và cách sửa lỗi.",
     benefit3: "Nâng cấp để sử dụng không giới hạn.",
     buyVip: "Mua Vip",
+
+    // MockTest2 (package page)
+    mocktest2: {
+      title: "Có gì hay?",
+      email: "(datng*****@gmail.com)",
+      features: [
+        "Phù hợp cho doanh nghiệp khảo sát ứng viên",
+        "Nói chuyện hơi mệt :)",
+        "Nâng cấp để dùng không giới hạn"
+      ],
+      packages: {
+        oneMonth: {
+          title: "1 Tháng",
+          days: "(30 ngày)",
+          price: "99.000 VNĐ",
+          perMonth: "99k/tháng"
+        },
+        threeMonth: {
+          title: "3 Tháng",
+          days: "(90 ngày)",
+          price: "270.000 VNĐ",
+          perMonth: "90k/tháng"
+        },
+        sixMonth: {
+          title: "6 Tháng",
+          days: "(180 ngày)",
+          price: "480.000 VNĐ",
+          perMonth: "80k/tháng"
+        }
+      }
+    },
 
     // Specialized
     specializedTitle: "Luyện tập chuyên ngành",

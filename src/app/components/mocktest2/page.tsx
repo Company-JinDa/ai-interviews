@@ -10,9 +10,13 @@ import {
   Button,
 } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
 
 export default function MockTest2() {
   const router = useRouter()
+  const { lang } = useLang()
+  const t = translations[lang]
 
   return (
     <Flex
@@ -49,102 +53,51 @@ export default function MockTest2() {
         textAlign="center"
       >
         <Text fontSize="xl" fontWeight="bold" mb={2}>
-          What's cool?
+          {t.mocktest2.title}
         </Text>
-        <Text mb={4}>(datng*****@gmail.com)</Text>
+        <Text mb={4}>{t.mocktest2.email}</Text>
 
         <VStack align="start" spacing={3} pl={6}>
-          <HStack>
-            <Text fontSize="2xl" color="green.500">✔</Text>
-            <Text>Suitable for businesses surveying candidates</Text>
-          </HStack>
-          <HStack>
-            <Text fontSize="2xl" color="green.500">✔</Text>
-            <Text>Talking is tiring :)</Text>
-          </HStack>
-          <HStack>
-            <Text fontSize="2xl" color="green.500">✔</Text>
-            <Text>Upgrade for unlimited use</Text>
-          </HStack>
+          {t.mocktest2.features.map((feature: string, i: number) => (
+            <HStack key={i}>
+              <Text fontSize="2xl" color="green.500">✔</Text>
+              <Text>{feature}</Text>
+            </HStack>
+          ))}
         </VStack>
       </Box>
 
       {/* Package Options */}
       <Flex justify="center" gap={10} wrap="wrap">
-        {/* 1 Month */}
-        <Box
-          border="1px solid"
-          borderColor="cyan.200"
-          p={6}
-          w="250px"
-          textAlign="center"
-        >
-          <Text fontWeight="bold" color="blue.600">
-            1 Month <Text as="span" fontWeight="normal">(30 days)</Text>
-          </Text>
-          <Text mt={2}>99.000 VNĐ</Text>
-          <Text fontSize="xl" fontWeight="bold" mt={2}>
-            99k/month
-          </Text>
-          <Button
-            mt={4}
-            colorScheme="blue"
-            variant="outline"
-            onClick={() => router.push("/components/mocktest3")}
+        {Object.values(t.mocktest2.packages).map((pkg: any, i: number) => (
+          <Box
+            key={i}
+            border="1px solid"
+            borderColor="cyan.200"
+            p={6}
+            w="250px"
+            textAlign="center"
           >
-            Buy Vip
-          </Button>
-        </Box>
-
-        {/* 3 Month */}
-        <Box
-          border="1px solid"
-          borderColor="cyan.200"
-          p={6}
-          w="250px"
-          textAlign="center"
-        >
-          <Text fontWeight="bold" color="blue.600">
-            3 Month <Text as="span" fontWeight="normal">(90 days)</Text>
-          </Text>
-          <Text mt={2}>270.000 VNĐ</Text>
-          <Text fontSize="xl" fontWeight="bold" mt={2}>
-            90k/month
-          </Text>
-          <Button
-            mt={4}
-            colorScheme="blue"
-            variant="outline"
-            onClick={() => router.push("/components/mocktest3")}
-          >
-            Buy Vip
-          </Button>
-        </Box>
-
-        {/* 6 Month */}
-        <Box
-          border="1px solid"
-          borderColor="cyan.200"
-          p={6}
-          w="250px"
-          textAlign="center"
-        >
-          <Text fontWeight="bold" color="blue.600">
-            6 Month <Text as="span" fontWeight="normal">(180 days)</Text>
-          </Text>
-          <Text mt={2}>480.000 VNĐ</Text>
-          <Text fontSize="xl" fontWeight="bold" mt={2}>
-            80k/month
-          </Text>
-          <Button
-            mt={4}
-            colorScheme="blue"
-            variant="outline"
-            onClick={() => router.push("/components/mocktest3")}
-          >
-            Buy Vip
-          </Button>
-        </Box>
+            <Text fontWeight="bold" color="blue.600">
+              {pkg.title}{" "}
+              <Text as="span" fontWeight="normal">
+                {pkg.days}
+              </Text>
+            </Text>
+            <Text mt={2}>{pkg.price}</Text>
+            <Text fontSize="xl" fontWeight="bold" mt={2}>
+              {pkg.perMonth}
+            </Text>
+            <Button
+              mt={4}
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => router.push("/components/mocktest3")}
+            >
+              {t.buyVip}
+            </Button>
+          </Box>
+        ))}
       </Flex>
     </Flex>
   )
