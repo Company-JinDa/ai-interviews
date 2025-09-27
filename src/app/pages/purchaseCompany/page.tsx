@@ -1,80 +1,97 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Box, Text, Image, Spinner } from "@chakra-ui/react"
+import {
+  Box,
+  Flex,
+  VStack,
+  HStack,
+  Text,
+  Button,
+  Image,
+  Divider,
+} from "@chakra-ui/react"
+import { useRouter } from "next/navigation"
 
-export default function PurchaseCompany() {
-  const [order, setOrder] = useState<any>(null)
-  const [timeLeft, setTimeLeft] = useState<number>(0)
-
-  useEffect(() => {
-    const createOrder = async () => {
-      const res = await fetch("/api/sepay/create-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: 255000,
-          orderCode: "ORDER_" + Date.now(),
-          description: "Thanh toán 255k / 3 tháng",
-        }),
-      })
-      const result = await res.json()
-      if (result?.data) {
-        setOrder(result.data)
-        // expired_at là unix timestamp từ SePay
-        const expire = result.data.expired_at
-        const now = Math.floor(Date.now() / 1000)
-        setTimeLeft(expire - now)
-      }
-    }
-    createOrder()
-  }, [])
-
-  useEffect(() => {
-    if (!timeLeft) return
-    const timer = setInterval(() => {
-      setTimeLeft((t) => (t > 0 ? t - 1 : 0))
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [timeLeft])
-
-  const formatTime = (s: number) =>
-    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`
-
-  if (!order) {
-    return (
-      <Box textAlign="center" p={10}>
-        <Spinner size="xl" />
-        <Text mt={4}>Đang tạo đơn hàng...</Text>
-      </Box>
-    )
-  }
+export default function PurchaseCompanyPage() {
+  const router = useRouter()
 
   return (
-    <Box textAlign="center" p={10}>
-      <Text fontSize="xl" fontWeight="bold">
-        Thanh toán {order.amount / 1000}k / 3 tháng
-      </Text>
-      <Text>(email user ở đây)</Text>
-
-      <Text mt={4}>Quét mã bên dưới để chuyển khoản.</Text>
-      <Text fontWeight="bold" color="purple.600">
-        Lưu ý: GIỮ NGUYÊN nội dung để xác nhận thành công.
-      </Text>
-
-      <Image src={order.qr_code} alt="QR Code" mx="auto" my={6} boxSize="250px" />
-
-      <Text>Đang đợi bạn chuyển tiền ⟳</Text>
-      <Text>Hết hiệu lực trong: <b>{formatTime(timeLeft)}</b></Text>
-
-      <Box border="1px solid #ddd" rounded="md" p={4} mt={4} maxW="sm" mx="auto">
-        <Text>Ngân hàng: {order.bank_account.bank_name}</Text>
-        <Text>STK: {order.bank_account.account_number}</Text>
-        <Text>Người nhận: {order.bank_account.account_name}</Text>
-        <Text>
-          Nội dung: <b>{order.description}</b>
+    <Flex
+      direction="column"
+      minH="100vh"
+      p={6}
+      bg="gray.50"
+      align="center"
+      justify="center"
+    >
+      <VStack
+        spacing={6}
+        w={{ base: "100%", md: "600px" }}
+        bg="white"
+        p={8}
+        rounded="2xl"
+        shadow="md"
+      >
+        {/* Header */}
+        <Text fontSize="2xl" fontWeight="bold" color="teal.600">
+          Purchase Company Package
         </Text>
-      </Box>
-    </Box>
+        <Divider />
+
+        {/* Company Info */}
+        <HStack spacing={4}>
+          <Image
+            src="/company-logo.png"
+            alt="Company Logo"
+            boxSize="64px"
+            objectFit="contain"
+          />
+          <VStack align="start" spacing={0}>
+            <Text fontSize="lg" fontWeight="semibold">
+              Company ABC
+            </Text>
+            <Text fontSize="sm" color="gray.500">
+              Premium Business Package
+            </Text>
+          </VStack>
+        </HStack>
+
+        {/* Package details */}
+        <Box w="100%" p={4} bg="gray.100" rounded="lg">
+          <Text fontSize="md" fontWeight="medium">
+            Package Includes:
+          </Text>
+          <Text fontSize="sm" color="gray.600" mt={2}>
+            • 10 business accounts <br />
+            • Unlimited storage <br />
+            • 24/7 Support <br />
+            • Advanced analytics
+          </Text>
+        </Box>
+
+        {/* Pricing */}
+        <Text fontSize="xl" fontWeight="bold" color="teal.700">
+          $299 / month
+        </Text>
+
+        {/* Buttons */}
+        <HStack spacing={4}>
+          <Button
+            colorScheme="teal"
+            size="lg"
+            onClick={() => alert("Redirect to payment")}
+          >
+            Purchase Now
+          </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => router.push("/dashboard")}
+          >
+            Cancel
+          </Button>
+        </HStack>
+      </VStack>
+    </Flex>
   )
 }
