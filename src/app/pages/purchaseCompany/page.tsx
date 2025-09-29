@@ -11,6 +11,7 @@ import {
 } from "@chakra-ui/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
+import { getFirestore, collection, getDocs } from "firebase/firestore";
 
 export default function PurchaseCompany() {
   const router = useRouter()
@@ -21,6 +22,7 @@ export default function PurchaseCompany() {
   const content = searchParams?.get("content") || ""
 
   const [timeLeft, setTimeLeft] = useState(15 * 60) // 15 phút
+  const [status, setStatus] = useState<"pending" | "success">("pending")
 
   // countdown
   useEffect(() => {
@@ -28,6 +30,25 @@ export default function PurchaseCompany() {
     const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000)
     return () => clearInterval(timer)
   }, [timeLeft])
+
+  // polling check giao dịch
+  useEffect(() => {
+    if (!content) return
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/check-transaction?content=${content}`)
+        const data = await res.json()
+        if (data.status === "success") {
+          setStatus("success")
+          clearInterval(interval)
+          setTimeout(() => router.push("/auth/dashboard"), 3000) // 3s sau về dashboard
+        }
+      } catch (err) {
+        console.error("Polling error:", err)
+      }
+    }, 5000) // check mỗi 5s
+    return () => clearInterval(interval)
+  }, [content, router])
 
   const minutes = Math.floor(timeLeft / 60)
   const seconds = timeLeft % 60
@@ -76,10 +97,16 @@ export default function PurchaseCompany() {
           <Text color="blue.600">{content}</Text>
         </VStack>
 
-        {/* Countdown */}
-        <Text mb={4} color="red.500" fontWeight="bold">
-          Thời gian còn lại: {minutes}:{seconds.toString().padStart(2, "0")}
-        </Text>
+        {/* Countdown hoặc trạng thái */}
+        {status === "pending" ? (
+          <Text mb={4} color="red.500" fontWeight="bold">
+            Thời gian còn lại: {minutes}:{seconds.toString().padStart(2, "0")}
+          </Text>
+        ) : (
+          <Text mb={4} color="green.500" fontWeight="bold">
+            Thanh toán thành công ✅. Đang chuyển về trang chủ...
+          </Text>
+        )}
 
         <Button colorScheme="red" onClick={() => router.push("/components/packageCompany")}>
           Hủy
