@@ -86,7 +86,7 @@ export default function PackageCompany() {
             {t.packages.threeMonth.days}
           </Text>
           <Text fontSize="2xl" fontWeight="bold" mb={4}>
-            {t.packages.threeMonth.price}
+            {t.packages.threeMonth.title}
           </Text>
           <Button
             colorScheme="blue"
@@ -112,7 +112,7 @@ export default function PackageCompany() {
             {t.packages.sixMonth.days}
           </Text>
           <Text fontSize="2xl" fontWeight="bold" mb={4}>
-            {t.packages.sixMonth.price}
+            {t.packages.sixMonth.title}
           </Text>
           <Button
             colorScheme="blue"
