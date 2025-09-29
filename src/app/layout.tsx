@@ -1,5 +1,5 @@
 import { Provider } from "@/components/ui/provider"
-import { LangProvider } from "@/app/context/LangContext/page"
+import { LangProvider } from "@/app/context/LangContext/LangContext"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

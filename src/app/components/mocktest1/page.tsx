@@ -11,7 +11,7 @@ import {
   Select,
 } from "@chakra-ui/react"
 import { useRouter } from "next/navigation"
-import { useLang } from "@/app/context/LangContext/page"
+import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
 
 export default function MockTest1() {

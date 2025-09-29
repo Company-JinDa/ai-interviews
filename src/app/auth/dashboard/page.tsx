@@ -23,7 +23,7 @@ import { auth } from "@/app/lib/firebase"
 import { signOut } from "firebase/auth"
 import { useEffect, useState } from "react"
 
-import { useLang } from "@/app/context/LangContext/page"
+import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
 
 const generateData = (year: number) => {
