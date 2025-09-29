@@ -1,43 +1,128 @@
 "use client"
-import { createContext, useContext, useState, ReactNode, useEffect } from "react"
 
-type Lang = "en" | "vi"
+import {
+  Box,
+  Flex,
+  Text,
+  VStack,
+  HStack,
+  Image,
+  Button,
+} from "@chakra-ui/react"
+import { useRouter } from "next/navigation"
+import { useLang } from "@/app/context/LangContext/page"
+import { translations } from "@/app/lib/translations"
 
-interface LangContextType {
-  lang: Lang
-  toggleLang: () => void
-}
-
-const LangContext = createContext<LangContextType | undefined>(undefined)
-
-export const LangProvider = ({ children }: { children: ReactNode }) => {
-  const [lang, setLang] = useState<Lang>("en")
-
-  // 🔹 Khi component mount, đọc từ localStorage
-  useEffect(() => {
-    const savedLang = localStorage.getItem("lang") as Lang | null
-    if (savedLang) {
-      setLang(savedLang)
-    }
-  }, [])
-
-  const toggleLang = () => {
-    setLang((prev) => {
-      const newLang = prev === "en" ? "vi" : "en"
-      localStorage.setItem("lang", newLang) // 🔹 Lưu vào localStorage
-      return newLang
-    })
-  }
+export default function PackageCompany() {
+  const router = useRouter()
+  const { lang } = useLang()
+  const t = translations[lang]
 
   return (
-    <LangContext.Provider value={{ lang, toggleLang }}>
-      {children}
-    </LangContext.Provider>
-  )
-}
+    <Flex
+      direction="column"
+      minH="100vh"
+      border="2px solid"
+      borderColor="blue.300"
+      p={4}
+      align="center"
+    >
+      {/* Logo + Title */}
+      <HStack
+        spacing={3}
+        cursor="pointer"
+        mb={4}
+        onClick={() => router.push("/auth/dashboard")}
+      >
+        <Image src="/logo.png" alt="logo" boxSize="50px" borderRadius="full" />
+        <Text fontSize="2xl" fontWeight="bold">
+          AI-Interview
+        </Text>
+      </HStack>
 
-export const useLang = () => {
-  const context = useContext(LangContext)
-  if (!context) throw new Error("useLang must be used within LangProvider")
-  return context
+      <Box w="100%" borderBottom="1px solid black" mb={6}></Box>
+
+      {/* What's cool section */}
+      <Box
+        border="1px solid"
+        borderColor="blue.200"
+        p={6}
+        borderRadius="md"
+        maxW="700px"
+        mb={10}
+        textAlign="center"
+      >
+        <Text fontSize="xl" fontWeight="bold" mb={2}>
+          {t.packageCompanyTitle}
+        </Text>
+        <Text mb={4} color="gray.600">
+          {t.packageCompanyEmail}
+        </Text>
+
+        <VStack spacing={3} align="start">
+          {t.packageCompanyFeatures.map((feature: string, idx: number) => (
+            <HStack key={idx} align="start">
+              <Text fontSize="2xl" color="green.500">✔</Text>
+              <Text>{feature}</Text>
+            </HStack>
+          ))}
+        </VStack>
+      </Box>
+
+      {/* Packages */}
+      <Flex justify="center" gap={10}>
+        <Box
+          border="1px solid"
+          borderColor="blue.200"
+          p={6}
+          w="250px"
+          textAlign="center"
+          borderRadius="md"
+        >
+          <Text fontWeight="bold" fontSize="lg" color="blue.700">
+            {t.packages.threeMonth.title}
+          </Text>
+          <Text fontSize="sm" color="gray.600" mb={2}>
+            {t.packages.threeMonth.days}
+          </Text>
+          <Text fontSize="2xl" fontWeight="bold" mb={4}>
+            {t.packages.threeMonth.price}
+          </Text>
+          <Button
+            colorScheme="blue"
+            w="full"
+            onClick={() => router.push("/pages/purchaseCompany")}
+          >
+            {t.packages.buyVip}
+          </Button>
+        </Box>
+
+        <Box
+          border="1px solid"
+          borderColor="blue.200"
+          p={6}
+          w="250px"
+          textAlign="center"
+          borderRadius="md"
+        >
+          <Text fontWeight="bold" fontSize="lg" color="blue.700">
+            {t.packages.sixMonth.title}
+          </Text>
+          <Text fontSize="sm" color="gray.600" mb={2}>
+            {t.packages.sixMonth.days}
+          </Text>
+          <Text fontSize="2xl" fontWeight="bold" mb={4}>
+            {t.packages.sixMonth.price}
+          </Text>
+          <Button
+            colorScheme="blue"
+            w="full"
+            onClick={() => router.push("/pages/purchaseCompany")}
+          >
+            {t.packages.buyVip}
+          </Button>
+        </Box>
+      </Flex>
+    </Flex>
+  )
 }
