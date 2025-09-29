@@ -48,19 +48,16 @@ export const translations = {
         oneMonth: {
           title: "1 Month",
           days: "(30 days)",
-          price: "99.000 VNĐ",
           perMonth: "99k/month"
         },
         threeMonth: {
           title: "3 Month",
           days: "(90 days)",
-          price: "270.000 VNĐ",
           perMonth: "90k/month"
         },
         sixMonth: {
           title: "6 Month",
           days: "(180 days)",
-          price: "480.000 VNĐ",
           perMonth: "80k/month"
         }
       }
@@ -97,13 +94,11 @@ export const translations = {
     packages: {
       threeMonth: {
         title: "3 Month",
-        days: "(90 days)",
-        price: "$1000"
+        days: "(90 days)"
       },
       sixMonth: {
         title: "6 Month",
-        days: "(180 days)",
-        price: "$1850"
+        days: "(180 days)"
       },
       buyVip: "Buy Vip"
     }
@@ -158,19 +153,16 @@ export const translations = {
         oneMonth: {
           title: "1 Tháng",
           days: "(30 ngày)",
-          price: "99.000 VNĐ",
           perMonth: "99k/tháng"
         },
         threeMonth: {
           title: "3 Tháng",
           days: "(90 ngày)",
-          price: "270.000 VNĐ",
           perMonth: "90k/tháng"
         },
         sixMonth: {
           title: "6 Tháng",
           days: "(180 ngày)",
-          price: "480.000 VNĐ",
           perMonth: "80k/tháng"
         }
       }
@@ -207,13 +199,11 @@ export const translations = {
     packages: {
       threeMonth: {
         title: "3 Tháng",
-        days: "(90 ngày)",
-        price: "23.000.000đ"
+        days: "(90 ngày)"
       },
       sixMonth: {
         title: "6 Tháng",
-        days: "(180 ngày)",
-        price: "42.000.000đ"
+        days: "(180 ngày)"
       },
       buyVip: "Mua Vip"
     }

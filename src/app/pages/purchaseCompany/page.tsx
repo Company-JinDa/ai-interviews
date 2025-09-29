@@ -3,95 +3,88 @@
 import {
   Box,
   Flex,
-  VStack,
-  HStack,
   Text,
-  Button,
+  HStack,
   Image,
-  Divider,
+  Button,
+  VStack,
 } from "@chakra-ui/react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState } from "react"
 
-export default function PurchaseCompanyPage() {
+export default function PurchaseCompany() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const qr = searchParams?.get("qr") || ""
+  const amount = searchParams?.get("price") || "0"
+  const packageName = searchParams?.get("title") || "Unknown"
+  const content = searchParams?.get("content") || ""
+
+  const [timeLeft, setTimeLeft] = useState(15 * 60) // 15 phút
+
+  // countdown
+  useEffect(() => {
+    if (timeLeft <= 0) return
+    const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000)
+    return () => clearInterval(timer)
+  }, [timeLeft])
+
+  const minutes = Math.floor(timeLeft / 60)
+  const seconds = timeLeft % 60
 
   return (
-    <Flex
-      direction="column"
-      minH="100vh"
-      p={6}
-      bg="gray.50"
-      align="center"
-      justify="center"
-    >
-      <VStack
-        spacing={6}
-        w={{ base: "100%", md: "600px" }}
-        bg="white"
-        p={8}
-        rounded="2xl"
-        shadow="md"
+    <Flex direction="column" minH="100vh" p={6} align="center">
+      {/* Logo + title */}
+      <HStack
+        spacing={3}
+        cursor="pointer"
+        mb={6}
+        onClick={() => router.push("/auth/dashboard")}
       >
-        {/* Header */}
-        <Text fontSize="2xl" fontWeight="bold" color="teal.600">
-          Purchase Company Package
+        <Image src="/logo.png" alt="logo" boxSize="50px" borderRadius="full" />
+        <Text fontSize="2xl" fontWeight="bold">
+          AI-Interview
         </Text>
-        <Divider />
+      </HStack>
 
-        {/* Company Info */}
-        <HStack spacing={4}>
-          <Image
-            src="/company-logo.png"
-            alt="Company Logo"
-            boxSize="64px"
-            objectFit="contain"
-          />
-          <VStack align="start" spacing={0}>
-            <Text fontSize="lg" fontWeight="semibold">
-              Company ABC
-            </Text>
-            <Text fontSize="sm" color="gray.500">
-              Premium Business Package
-            </Text>
-          </VStack>
-        </HStack>
+      <Box
+        border="1px solid"
+        borderColor="blue.300"
+        p={6}
+        borderRadius="md"
+        maxW="500px"
+        textAlign="center"
+      >
+        <Text fontSize="xl" fontWeight="bold" mb={2}>
+          Thanh toán gói {packageName}
+        </Text>
+        <Text mb={4} color="gray.600">
+          Số tiền cần thanh toán:{" "}
+          <Text as="span" fontWeight="bold">
+            {amount} VND
+          </Text>
+        </Text>
 
-        {/* Package details */}
-        <Box w="100%" p={4} bg="gray.100" rounded="lg">
-          <Text fontSize="md" fontWeight="medium">
-            Package Includes:
-          </Text>
-          <Text fontSize="sm" color="gray.600" mt={2}>
-            • 10 business accounts <br />
-            • Unlimited storage <br />
-            • 24/7 Support <br />
-            • Advanced analytics
-          </Text>
+        {/* QR */}
+        <Box mb={4}>
+          <Image src={qr} alt="QR Code SePay" width={200} height={200} mx="auto" />
         </Box>
 
-        {/* Pricing */}
-        <Text fontSize="xl" fontWeight="bold" color="teal.700">
-          $299 / month
+        {/* Nội dung chuyển khoản */}
+        <VStack spacing={2} mb={4}>
+          <Text fontWeight="bold">Nội dung chuyển khoản:</Text>
+          <Text color="blue.600">{content}</Text>
+        </VStack>
+
+        {/* Countdown */}
+        <Text mb={4} color="red.500" fontWeight="bold">
+          Thời gian còn lại: {minutes}:{seconds.toString().padStart(2, "0")}
         </Text>
 
-        {/* Buttons */}
-        <HStack spacing={4}>
-          <Button
-            colorScheme="teal"
-            size="lg"
-            onClick={() => alert("Redirect to payment")}
-          >
-            Purchase Now
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => router.push("/dashboard")}
-          >
-            Cancel
-          </Button>
-        </HStack>
-      </VStack>
+        <Button colorScheme="red" onClick={() => router.push("/components/packageCompany")}>
+          Hủy
+        </Button>
+      </Box>
     </Flex>
   )
 }
