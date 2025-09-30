@@ -89,7 +89,6 @@ export default function HomePage() {
         </Link>
       </HStack>
 
-      {/* Center slogan */}
       <VStack
         position="absolute"
         top="50%"
