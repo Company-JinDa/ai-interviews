@@ -112,7 +112,7 @@ export default function HomePage() {
         </Text>
 
         <Text
-          fontSize={{ base: "xl", md: "2xl", lg: "1xl" }}
+          fontSize={{ base: "xl", md: "1xl", lg: "1xl" }}
           fontWeight="extrabold"
           bgGradient="linear(to-r, teal.200, cyan.300, white)"
           bgClip="text"
@@ -121,7 +121,7 @@ export default function HomePage() {
           {content[lang].line1}
         </Text>
          <Text
-          fontSize={{ base: "xl", md: "2xl", lg: "1xl" }}
+          fontSize={{ base: "xl", md: "1xl", lg: "1xl" }}
           fontWeight="extrabold"
           bgGradient="linear(to-r, teal.200, cyan.300, white)"
           bgClip="text"
