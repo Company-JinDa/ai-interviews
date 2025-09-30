@@ -19,12 +19,14 @@ import { FcGoogle } from "react-icons/fc"
 import NextLink from "next/link"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { auth } from "@/app/lib/firebase"
+import { auth, db } from "@/app/lib/firebase" // db = getFirestore()
 import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  User,
 } from "firebase/auth"
+import { doc, setDoc, getDoc } from "firebase/firestore"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -33,11 +35,32 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
+  // Hàm lưu user vào Firestore nếu chưa có
+  const saveUserToFirestore = async (user: User) => {
+    try {
+      const userRef = doc(db, "users", user.uid)
+      const userSnap = await getDoc(userRef)
+
+      if (!userSnap.exists()) {
+        // Nếu chưa có trong firestore thì tạo mới
+        await setDoc(userRef, {
+          uid: user.uid,       // lưu uid
+          email: user.email,
+          role: "candidate",   // mặc định role = candidate
+          createdAt: new Date(),
+        })
+      }
+    } catch (err) {
+      console.error("Failed to save user:", err)
+    }
+  }
+
   const handleLogin = async () => {
     try {
       setLoading(true)
       setError(null)
-      await signInWithEmailAndPassword(auth, email, password)
+      const credential = await signInWithEmailAndPassword(auth, email, password)
+      await saveUserToFirestore(credential.user) // lưu user vào firestore
       router.push("/auth/dashboard") 
     } catch (err: any) {
       setError(err.message)
@@ -49,7 +72,8 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider()
-      await signInWithPopup(auth, provider)
+      const credential = await signInWithPopup(auth, provider)
+      await saveUserToFirestore(credential.user) // lưu user vào firestore
       router.push("/auth/dashboard") 
     } catch (err: any) {
       setError(err.message)
