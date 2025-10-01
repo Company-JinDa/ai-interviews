@@ -19,9 +19,8 @@ import {
   MenuItem,
 } from "@chakra-ui/react"
 import { useEffect, useState } from "react"
-import { auth, db, storage } from "@/app/lib/firebase"
+import { auth, db } from "@/app/lib/firebase"
 import { doc, getDoc, setDoc } from "firebase/firestore"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { signOut } from "firebase/auth"
 import { ChevronDownIcon } from "@chakra-ui/icons"
 import { FaHome, FaBicycle, FaRegFileAlt, FaUser } from "react-icons/fa"
@@ -31,14 +30,12 @@ import { useRouter } from "next/navigation"
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [profile, setProfile] = useState<any>({
     name: "",
     email: "",
     phone: "",
     address: "",
     job: "",
-    avatar: "",
   })
 
   const toast = useToast()
@@ -51,11 +48,12 @@ export default function ProfilePage() {
       if (!user) return
 
       try {
-        const refDoc = doc(db, "users", user.uid)
-        const snap = await getDoc(refDoc)
+        const ref = doc(db, "users", user.uid)
+        const snap = await getDoc(ref)
         if (snap.exists()) {
-          setProfile(snap.data()) // lấy từ Firestore
+          setProfile(snap.data()) // Lấy từ Firestore
         } else {
+          // Nếu chưa có thì chỉ lấy email từ Auth
           setProfile((prev: any) => ({ ...prev, email: user.email }))
         }
       } catch (err) {
@@ -68,32 +66,16 @@ export default function ProfilePage() {
     fetchProfile()
   }, [])
 
-  // Upload ảnh avatar lên Firebase Storage
-  const uploadAvatar = async (uid: string, file: File) => {
-    const storageRef = ref(storage, `avatars/${uid}`)
-    await uploadBytes(storageRef, file)
-    return await getDownloadURL(storageRef)
-  }
-
-  // Lưu thông tin vào Firestore (collection users)
+  // Lưu thông tin vào Firestore
   const handleSave = async () => {
     const user = auth.currentUser
     if (!user) return
 
     setSaving(true)
     try {
-      let avatarURL = profile.avatar
-      if (avatarFile) {
-        avatarURL = await uploadAvatar(user.uid, avatarFile)
-      }
-
-      const refDoc = doc(db, "users", user.uid)
-      await setDoc(
-        refDoc,
-        { ...profile, email: user.email, avatar: avatarURL },
-        { merge: true }
-      )
-
+      const ref = doc(db, "users", user.uid)
+      // Luôn đảm bảo email là từ Auth, không cho người dùng chỉnh sửa
+      await setDoc(ref, { ...profile, email: user.email }, { merge: true })
       toast({
         title: "Profile saved successfully.",
         status: "success",
@@ -145,13 +127,34 @@ export default function ProfilePage() {
         </HStack>
 
         <VStack align="start" spacing={4} fontSize="lg" mb="auto">
-          <Button as={Link} href="/auth/dashboard" variant="ghost" leftIcon={<FaHome />} justifyContent="flex-start" w="full">
+          <Button
+            as={Link}
+            href="/auth/dashboard"
+            variant="ghost"
+            leftIcon={<FaHome />}
+            justifyContent="flex-start"
+            w="full"
+          >
             Home
           </Button>
-          <Button as={Link} href="/components/specialized" variant="ghost" leftIcon={<FaBicycle />} justifyContent="flex-start" w="full">
+          <Button
+            as={Link}
+            href="/components/specialized"
+            variant="ghost"
+            leftIcon={<FaBicycle />}
+            justifyContent="flex-start"
+            w="full"
+          >
             Specialized Practice
           </Button>
-          <Button as={Link} href="/components/mocktest" variant="ghost" leftIcon={<FaRegFileAlt />} justifyContent="flex-start" w="full">
+          <Button
+            as={Link}
+            href="/components/mocktest"
+            variant="ghost"
+            leftIcon={<FaRegFileAlt />}
+            justifyContent="flex-start"
+            w="full"
+          >
             Mock Test
           </Button>
         </VStack>
@@ -200,34 +203,22 @@ export default function ProfilePage() {
           </Text>
         </Flex>
 
-        <Box maxW="600px" mx="auto" p={6} bg="white" borderRadius="md" boxShadow="md">
+        <Box
+          maxW="600px"
+          mx="auto"
+          p={6}
+          bg="white"
+          borderRadius="md"
+          boxShadow="md"
+        >
           <VStack spacing={4} align="stretch">
-            {/* Avatar */}
-            <FormControl>
-          <FormLabel>Avatar</FormLabel>
-          <Flex align="center" gap={4}>
-            <Image
-              src={profile.avatar || ""}
-              fallbackSrc="https://via.placeholder.com/80?text=Avatar"
-              alt="avatar"
-              boxSize="80px"
-              borderRadius="full"
-              objectFit="cover"
-            />
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-            />
-          </Flex>
-        </FormControl>
-
-
             <FormControl>
               <FormLabel>Full Name</FormLabel>
               <Input
                 value={profile.name}
-                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                onChange={(e) =>
+                  setProfile({ ...profile, name: e.target.value })
+                }
                 placeholder="Enter your full name"
               />
             </FormControl>
@@ -241,7 +232,9 @@ export default function ProfilePage() {
               <FormLabel>Phone Number</FormLabel>
               <Input
                 value={profile.phone}
-                onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                onChange={(e) =>
+                  setProfile({ ...profile, phone: e.target.value })
+                }
                 placeholder="Enter your phone number"
               />
             </FormControl>
@@ -250,7 +243,9 @@ export default function ProfilePage() {
               <FormLabel>Address</FormLabel>
               <Input
                 value={profile.address}
-                onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                onChange={(e) =>
+                  setProfile({ ...profile, address: e.target.value })
+                }
                 placeholder="Enter your address"
               />
             </FormControl>
@@ -259,7 +254,9 @@ export default function ProfilePage() {
               <FormLabel>Job / Occupation</FormLabel>
               <Input
                 value={profile.job}
-                onChange={(e) => setProfile({ ...profile, job: e.target.value })}
+                onChange={(e) =>
+                  setProfile({ ...profile, job: e.target.value })
+                }
                 placeholder="Enter your job"
               />
             </FormControl>
