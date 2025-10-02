@@ -139,17 +139,16 @@ export default function DashboardPage() {
             {t.mocktest}
           </Button>
 
-          {/* 🔹 Nếu role = company thì hiện thêm Manager */}
           {role === "company" && (
             <Button
               as={Link}
-              href="/manager"
+              href="/manager/manage"
               variant="ghost"
               leftIcon={<FaUser />}
               justifyContent="flex-start"
               w="full"
             >
-              Manager
+              {t.manager}
             </Button>
           )}
         </VStack>
