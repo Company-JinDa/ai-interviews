@@ -41,7 +41,7 @@ export default function ProfilePage() {
   const toast = useToast()
   const router = useRouter()
 
-  // Lấy thông tin user từ Firestore + Auth
+  // Lấy thông tin user
   useEffect(() => {
     const fetchProfile = async () => {
       const user = auth.currentUser
@@ -51,9 +51,8 @@ export default function ProfilePage() {
         const ref = doc(db, "users", user.uid)
         const snap = await getDoc(ref)
         if (snap.exists()) {
-          setProfile(snap.data()) // Lấy từ Firestore
+          setProfile(snap.data())
         } else {
-          // Nếu chưa có thì chỉ lấy email từ Auth
           setProfile((prev: any) => ({ ...prev, email: user.email }))
         }
       } catch (err) {
@@ -66,7 +65,7 @@ export default function ProfilePage() {
     fetchProfile()
   }, [])
 
-  // Lưu thông tin vào Firestore
+  // Lưu profile
   const handleSave = async () => {
     const user = auth.currentUser
     if (!user) return
@@ -74,7 +73,6 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       const ref = doc(db, "users", user.uid)
-      // Luôn đảm bảo email là từ Auth, không cho người dùng chỉnh sửa
       await setDoc(ref, { ...profile, email: user.email }, { merge: true })
       toast({
         title: "Profile saved successfully.",
@@ -110,7 +108,7 @@ export default function ProfilePage() {
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
-      {/* Sidebar bên trái */}
+      {/* Sidebar */}
       <Box
         w="250px"
         borderRight="1px solid"
@@ -157,6 +155,17 @@ export default function ProfilePage() {
           >
             Mock Test
           </Button>
+          {/* Thêm Manage */}
+          <Button
+            as={Link}
+            href="/components/manage"
+            variant="ghost"
+            leftIcon={<FaUser />}
+            justifyContent="flex-start"
+            w="full"
+          >
+            Manage
+          </Button>
         </VStack>
 
         <Button
@@ -192,7 +201,7 @@ export default function ProfilePage() {
         </Box>
       </Box>
 
-      {/* Nội dung bên phải */}
+      {/* Nội dung chính */}
       <Box flex="1" p={6} bg="gray.100" minH="100vh" overflow="auto">
         <Flex direction="column" align="center" mb={10}>
           <Text fontSize="3xl" fontWeight="bold" textAlign="center" mb={2}>
@@ -225,7 +234,7 @@ export default function ProfilePage() {
 
             <FormControl>
               <FormLabel>Email</FormLabel>
-              <Input value={profile.email} isDisabled /> {/* Không cho sửa */}
+              <Input value={profile.email} isDisabled />
             </FormControl>
 
             <FormControl>

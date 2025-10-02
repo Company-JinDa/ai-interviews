@@ -19,8 +19,8 @@ import { FaHome, FaBicycle, FaRegFileAlt, FaUser } from "react-icons/fa"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/app/lib/firebase"
-import { signOut } from "firebase/auth"
-import { collection, query, getDocs } from "firebase/firestore"
+import { signOut, onAuthStateChanged } from "firebase/auth"
+import { collection, query, getDocs, doc, getDoc } from "firebase/firestore"
 import { useEffect, useState } from "react"
 
 import { useLang } from "@/app/context/LangContext/LangContext"
@@ -30,6 +30,7 @@ export default function MockTestPage() {
   const router = useRouter()
   const [history, setHistory] = useState<any[]>([])
   const [filter, setFilter] = useState<string>("IT")
+  const [role, setRole] = useState<string | null>(null)
 
   const { lang } = useLang()
   const t = translations[lang]
@@ -52,6 +53,24 @@ export default function MockTestPage() {
     }
     fetchHistory()
   }, [])
+
+  // 🔹 Check role
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userRef = doc(db, "users", user.uid)
+        const snap = await getDoc(userRef)
+        if (snap.exists()) {
+          setRole(snap.data().role || "candidate")
+        } else {
+          setRole("candidate")
+        }
+      } else {
+        router.push("/auth/login")
+      }
+    })
+    return () => unsubscribe()
+  }, [router])
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
@@ -103,6 +122,20 @@ export default function MockTestPage() {
           >
             {t.mocktest}
           </Button>
+
+          {/* 🔹 Manager button nếu role = company */}
+          {role === "company" && (
+            <Button
+              as={Link}
+              href="/manager/manage"
+              variant="ghost"
+              leftIcon={<FaUser />}
+              justifyContent="flex-start"
+              w="full"
+            >
+              {t.manager}
+            </Button>
+          )}
         </VStack>
 
         <Button
