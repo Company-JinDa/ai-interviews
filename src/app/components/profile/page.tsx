@@ -159,17 +159,16 @@ export default function ProfilePage() {
             Mock Test
           </Button>
 
-          {/* Nút Manage: chỉ hiện nếu KHÔNG phải candidate */}
-          {role !== "candidate" && (
+          {role === "company" && (
             <Button
               as={Link}
-              href="/components/manage"
+              href="/manager/manage"
               variant="ghost"
               leftIcon={<FaUser />}
               justifyContent="flex-start"
               w="full"
             >
-              Manage
+              Manager
             </Button>
           )}
         </VStack>
