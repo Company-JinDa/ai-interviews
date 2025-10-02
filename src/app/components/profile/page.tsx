@@ -30,6 +30,7 @@ import { useRouter } from "next/navigation"
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [role, setRole] = useState<string>("") // thêm role
   const [profile, setProfile] = useState<any>({
     name: "",
     email: "",
@@ -51,7 +52,9 @@ export default function ProfilePage() {
         const ref = doc(db, "users", user.uid)
         const snap = await getDoc(ref)
         if (snap.exists()) {
-          setProfile(snap.data())
+          const data = snap.data()
+          setProfile(data)
+          if (data.role) setRole(data.role) // lấy role từ Firestore
         } else {
           setProfile((prev: any) => ({ ...prev, email: user.email }))
         }
@@ -73,7 +76,7 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       const ref = doc(db, "users", user.uid)
-      await setDoc(ref, { ...profile, email: user.email }, { merge: true })
+      await setDoc(ref, { ...profile, email: user.email, role }, { merge: true })
       toast({
         title: "Profile saved successfully.",
         status: "success",
@@ -155,17 +158,20 @@ export default function ProfilePage() {
           >
             Mock Test
           </Button>
-          {/* Thêm Manage */}
-          <Button
-            as={Link}
-            href="/components/manage"
-            variant="ghost"
-            leftIcon={<FaUser />}
-            justifyContent="flex-start"
-            w="full"
-          >
-            Manage
-          </Button>
+
+          {/* Nút Manage: chỉ hiện nếu KHÔNG phải candidate */}
+          {role !== "candidate" && (
+            <Button
+              as={Link}
+              href="/components/manage"
+              variant="ghost"
+              leftIcon={<FaUser />}
+              justifyContent="flex-start"
+              w="full"
+            >
+              Manage
+            </Button>
+          )}
         </VStack>
 
         <Button
