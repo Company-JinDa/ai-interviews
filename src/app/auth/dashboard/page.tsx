@@ -14,13 +14,15 @@ import {
   MenuList,
   MenuItem,
   Select,
+  Spinner,
 } from "@chakra-ui/react"
 import { ChevronDownIcon } from "@chakra-ui/icons"
 import { FaHome, FaBicycle, FaRegFileAlt, FaUser, FaGlobe } from "react-icons/fa"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { auth } from "@/app/lib/firebase"
-import { signOut } from "firebase/auth"
+import { auth, db } from "@/app/lib/firebase"
+import { signOut, onAuthStateChanged } from "firebase/auth"
+import { doc, getDoc } from "firebase/firestore"
 import { useEffect, useState } from "react"
 
 import { useLang } from "@/app/context/LangContext/LangContext"
@@ -41,6 +43,8 @@ export default function DashboardPage() {
   const router = useRouter()
   const [year, setYear] = useState<number>(2025)
   const [contributions, setContributions] = useState<Record<string, boolean>>({})
+  const [role, setRole] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   // 🔹 Lấy lang từ context
   const { lang, toggleLang } = useLang()
@@ -50,9 +54,37 @@ export default function DashboardPage() {
     setContributions(generateData(year))
   }, [year])
 
+  // 🔹 Lấy role từ Firestore khi login
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userRef = doc(db, "users", user.uid)
+        const snap = await getDoc(userRef)
+        if (snap.exists()) {
+          setRole(snap.data().role || "candidate")
+        } else {
+          setRole("candidate")
+        }
+      } else {
+        router.push("/auth/login")
+      }
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [router])
+
   const handleLogout = async () => {
     await signOut(auth)
     router.push("/auth/login")
+  }
+
+  if (loading) {
+    return (
+      <Flex justify="center" align="center" h="100vh">
+        <Spinner size="xl" />
+      </Flex>
+    )
   }
 
   return (
@@ -106,6 +138,20 @@ export default function DashboardPage() {
           >
             {t.mocktest}
           </Button>
+
+          {/* 🔹 Nếu role = company thì hiện thêm Manager */}
+          {role === "company" && (
+            <Button
+              as={Link}
+              href="/manager"
+              variant="ghost"
+              leftIcon={<FaUser />}
+              justifyContent="flex-start"
+              w="full"
+            >
+              Manager
+            </Button>
+          )}
         </VStack>
 
         <Button
@@ -140,6 +186,7 @@ export default function DashboardPage() {
         </Box>
       </Box>
 
+      {/* Content */}
       <Box flex="1" p={6} bg="gray.50" overflow="auto">
         {/* Top Section */}
         <Flex justify="space-between" align="start" mb={8}>
