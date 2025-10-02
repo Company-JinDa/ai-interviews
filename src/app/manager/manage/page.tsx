@@ -43,8 +43,8 @@ const CATEGORIES = {
     "Translation & Interpretation",
     "English Language Teaching",
     "Business English",
-    "English for Tourism & Hospitality",
-    "English for Media & Communication",
+    "English for Tourism",
+    "English for Media",
     "Academic English",
   ],
 }
