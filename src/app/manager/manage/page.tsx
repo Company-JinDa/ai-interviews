@@ -22,7 +22,13 @@ import {
   CloseIcon,
 } from "@chakra-ui/icons"
 import { auth, db } from "@/app/lib/firebase"
-import { doc, setDoc, getDocs, collection } from "firebase/firestore"
+import {
+  doc,
+  setDoc,
+  getDocs,
+  collection,
+  getDoc,
+} from "firebase/firestore"
 import { useRouter } from "next/navigation"
 
 const CATEGORIES = {
@@ -67,19 +73,43 @@ export default function ManagePage() {
     {}
   )
   const [loading, setLoading] = useState(false)
+  const [companyId, setCompanyId] = useState<string | null>(null)
+
   const toast = useToast()
 
   const currentQuestions = selectedSpec ? questionsMap[selectedSpec] || [] : []
 
-  // Load tất cả questionSets từ Firestore khi login
+  // Load role và questionSets từ Firestore
   useEffect(() => {
     const fetchQuestions = async () => {
       const user = auth.currentUser
       if (!user) return
       setLoading(true)
+
       try {
+        // Lấy role của user
+        const userRef = doc(db, "users", user.uid)
+        const userSnap = await getDoc(userRef)
+
+        if (!userSnap.exists()) {
+          console.error("User doc not found")
+          setLoading(false)
+          return
+        }
+
+        const role = userSnap.data()?.role
+        if (role !== "company") {
+          console.error("User is not company")
+          setLoading(false)
+          return
+        }
+
+        setCompanyId(user.uid)
+
+        // Lấy questionSets trong companies/{uid}/questionSets
         const ref = collection(db, "companies", user.uid, "questionSets")
         const snapshot = await getDocs(ref)
+
         const data: Record<string, Question[]> = {}
         const links: Record<string, string> = {}
 
@@ -87,9 +117,7 @@ export default function ManagePage() {
           const spec = docSnap.id
           const qData = docSnap.data()?.questions || []
           data[spec] = qData
-          links[spec] = `${window.location.origin}/interview/${
-            user.uid
-          }/${encodeURIComponent(spec)}`
+          links[spec] = `${window.location.origin}/interview/${user.uid}/${encodeURIComponent(spec)}`
         })
 
         setQuestionsMap(data)
@@ -97,6 +125,7 @@ export default function ManagePage() {
       } catch (err) {
         console.error("Error loading questions:", err)
       }
+
       setLoading(false)
     }
 
@@ -111,7 +140,6 @@ export default function ManagePage() {
       ...(questionsMap[selectedSpec] || []),
       { id: Date.now(), question: qInput, expected: eInput, editMode: false },
     ]
-
     setQuestionsMap({ ...questionsMap, [selectedSpec]: newQs })
     setQInput("")
     setEInput("")
@@ -147,13 +175,13 @@ export default function ManagePage() {
   // Save to Firestore + generate link
   const handleGenerate = async () => {
     const user = auth.currentUser
-    if (!user || !selectedSpec) return
+    if (!user || !selectedSpec || !companyId) return
 
     try {
-      const ref = doc(db, "companies", user.uid, "questionSets", selectedSpec)
+      const ref = doc(db, "companies", companyId, "questionSets", selectedSpec)
       await setDoc(ref, { questions: currentQuestions }, { merge: true })
 
-      const link = `${window.location.origin}/interview/${user.uid}/${encodeURIComponent(
+      const link = `${window.location.origin}/interview/${companyId}/${encodeURIComponent(
         selectedSpec
       )}`
 
