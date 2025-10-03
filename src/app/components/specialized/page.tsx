@@ -187,7 +187,8 @@ export default function SpecializedPracticePage() {
               colorScheme="teal"
               onClick={() => {
                 setFilter(cat)
-                router.push("/components/mocktest1")
+                router.push(`/components/specialized1?category=${cat}`)
+
               }}
             >
               {cat}

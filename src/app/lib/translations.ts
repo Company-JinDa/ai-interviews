@@ -20,7 +20,7 @@ export const translations = {
     mocktestTitle: "Mock Test",
     mocktestDesc:
       "Take a mock interview and get score estimates, corrections, and improvement guidance.",
-    categories: ["IT", "English Language", "Business Administration"],
+    categories: ["Information Technology", "English Language"],
     mockHistory: "Mock History",
     noTests: "There are no new tests yet.",
 
@@ -126,7 +126,7 @@ export const translations = {
     mocktestTitle: "Thi thử",
     mocktestDesc:
       "Tham gia phỏng vấn thử để nhận điểm số, góp ý và hướng dẫn cải thiện.",
-    categories: ["CNTT", "Tiếng Anh", "Quản trị kinh doanh"],
+    categories: ["CNTT", "Tiếng Anh"],
     mockHistory: "Lịch sử thi thử",
     noTests: "Chưa có bài thi nào.",
 
