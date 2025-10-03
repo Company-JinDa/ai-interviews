@@ -16,7 +16,7 @@ import {
 import { ChevronDownIcon } from "@chakra-ui/icons"
 import { FaHome, FaBicycle, FaRegFileAlt, FaUser } from "react-icons/fa"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { signOut, onAuthStateChanged } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { auth, db } from "@/app/lib/firebase"
@@ -26,13 +26,14 @@ import { useEffect, useState } from "react"
 import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
 
+// import mock data (sau này thay = Firestore hoặc file riêng)
+import { questionsIT } from "@/app/lib/questionsIT"
+import { questionsEnglish } from "@/app/lib/questionsEnglish"
+
 export default function Specialized1Page() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const initialCategory = searchParams.get("category") || "Information Technology"
-
   const [role, setRole] = useState<string | null>(null)
-  const [activeCategory, setActiveCategory] = useState(initialCategory)
+  const [activeCategory, setActiveCategory] = useState("Language English")
 
   const { lang } = useLang()
   const t = translations[lang]
@@ -60,46 +61,47 @@ export default function Specialized1Page() {
     return () => unsubscribe()
   }, [router])
 
-  // mock data (sau này thay bằng DB/Firebase)
-  const data: Record<string, any> = {
-    "Information Technology": {
-      Intern: {
-        Frontend: [
-          "What is HTML?",
-          "What are semantic tags in HTML?",
-        ],
-        Backend: [
-          "Explain client-server model.",
+  // 🔹 Dữ liệu tổng hợp: có thể thay bằng fetch Firestore
+  const data: Record<string, any[]> = {
+    "Language English": [
+      {
+        topic: "Plan schedule",
+        questions: questionsEnglish.Intern.General,
+      },
+      {
+        topic: "Happy things",
+        questions: [
+          "Do you think people are happy when buying new things?",
+          "Do you feel happy when buying new things?",
         ],
       },
-      Junior: {
-        Frontend: [
-          "What is the difference between var, let and const in JS?",
-        ],
-        Backend: [
-          "What is REST API?",
-          "Explain MVC pattern.",
-        ],
-        DevOps: [
-          "What is CI/CD?",
-          "What is Docker?",
-        ],
+    ],
+    "Information Technology": [
+      {
+        topic: "Frontend (Intern)",
+        questions: questionsIT.Intern.Frontend,
       },
-      Senior: {
-        Security: [
-          "Explain OWASP Top 10.",
-          "How to prevent SQL Injection?",
-        ],
+      {
+        topic: "Backend (Intern)",
+        questions: questionsIT.Intern.Backend,
       },
-    },
-    "Language English": {
-      Intern: {
-        General: [
-          "Do you like making plans?",
-          "Why do people enjoy shopping?",
-        ],
+      {
+        topic: "Frontend (Junior)",
+        questions: questionsIT.Junior.Frontend,
       },
-    },
+      {
+        topic: "Backend (Junior)",
+        questions: questionsIT.Junior.Backend,
+      },
+      {
+        topic: "DevOps (Junior)",
+        questions: questionsIT.Junior.DevOps,
+      },
+      {
+        topic: "Security (Senior)",
+        questions: questionsIT.Senior.Security,
+      },
+    ],
   }
 
   return (
@@ -211,38 +213,38 @@ export default function Specialized1Page() {
           ))}
         </Flex>
 
-        {/* Levels + Roles + Questions */}
-       {/* // <VStack align="stretch" spacing={6}>
-          {Object.entries(data[activeCategory]).map(([level, roles]: [string, any]) => (
-            <Box key={level} border="1px solid" borderColor="gray.300" p={4} borderRadius="md">
-              <Text fontWeight="bold" fontSize="xl" mb={4} color="blue.600">
-                {level}
+        {/* Topics + Questions */}
+        <VStack align="stretch" spacing={6}>
+          {data[activeCategory]?.map((topic, idx) => (
+            <Box
+              key={idx}
+              border="1px solid"
+              borderColor="gray.300"
+              borderRadius="md"
+              p={4}
+            >
+              <Text fontWeight="bold" mb={3}>
+                {topic.topic}
               </Text>
-              {Object.entries(roles).map(([roleName, questions]: [string, string[]]) => (
-                <Box key={roleName} mb={6}>
-                  <Text fontWeight="semibold" mb={2} color="teal.600">
-                    {roleName}
-                  </Text>
-                  <Flex wrap="wrap" gap={4}>
-                    {questions.map((q, i) => (
-                      <Box
-                        key={i}
-                        p={3}
-                        border="1px solid"
-                        borderColor="gray.200"
-                        borderRadius="md"
-                        bg="gray.50"
-                        minW="250px"
-                      >
-                        {q}
-                      </Box>
-                    ))}
-                  </Flex>
-                </Box>
-              ))}
+              <Flex wrap="wrap" gap={4}>
+                {topic.questions.map((q: string, i: number) => (
+                  <Box
+                    key={i}
+                    flex="1"
+                    minW="250px"
+                    p={3}
+                    border="1px solid"
+                    borderColor="gray.200"
+                    borderRadius="md"
+                    _hover={{ bg: "gray.50" }}
+                  >
+                    {q}
+                  </Box>
+                ))}
+              </Flex>
             </Box>
           ))}
-        </VStack> */}
+        </VStack>
       </Box>
     </Flex>
   )
