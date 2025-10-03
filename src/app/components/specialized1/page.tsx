@@ -12,13 +12,14 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  Spinner,
 } from "@chakra-ui/react"
 import { ChevronDownIcon } from "@chakra-ui/icons"
 import { FaHome, FaBicycle, FaRegFileAlt, FaUser } from "react-icons/fa"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signOut, onAuthStateChanged } from "firebase/auth"
-import { doc, getDoc } from "firebase/firestore"
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { auth, db } from "@/app/lib/firebase"
 import { useEffect, useState } from "react"
 
@@ -26,14 +27,19 @@ import { useEffect, useState } from "react"
 import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
 
-// import mock data (sau này thay = Firestore hoặc file riêng)
-import { questionsIT } from "@/app/lib/questionsIT"
-import { questionsEnglish } from "@/app/lib/questionsEnglish"
-
 export default function Specialized1Page() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialCategory = searchParams?.get("category") || "Information Technology"
+
   const [role, setRole] = useState<string | null>(null)
-  const [activeCategory, setActiveCategory] = useState("Language English")
+  const [activeCategory, setActiveCategory] = useState<string>(initialCategory)
+  const [levels, setLevels] = useState<string[]>([]) // available levels for category
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null)
+  const [rolesList, setRolesList] = useState<string[]>([]) // roles for selected level
+  const [selectedRole, setSelectedRole] = useState<string | null>(null)
+  const [questionsList, setQuestionsList] = useState<string[]>([])
+  const [loading, setLoading] = useState<boolean>(false)
 
   const { lang } = useLang()
   const t = translations[lang]
@@ -43,14 +49,14 @@ export default function Specialized1Page() {
     router.push("/auth/login")
   }
 
-  // check role
+  // check role for sidebar (unchanged)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userRef = doc(db, "users", user.uid)
         const snap = await getDoc(userRef)
         if (snap.exists()) {
-          setRole(snap.data().role || "candidate")
+          setRole((snap.data() as any).role || "candidate")
         } else {
           setRole("candidate")
         }
@@ -61,52 +67,142 @@ export default function Specialized1Page() {
     return () => unsubscribe()
   }, [router])
 
-  // 🔹 Dữ liệu tổng hợp: có thể thay bằng fetch Firestore
-  const data: Record<string, any[]> = {
-    "Language English": [
-      {
-        topic: "Plan schedule",
-        questions: questionsEnglish.Intern.General,
-      },
-      {
-        topic: "Happy things",
-        questions: [
-          "Do you think people are happy when buying new things?",
-          "Do you feel happy when buying new things?",
-        ],
-      },
-    ],
-    "Information Technology": [
-      {
-        topic: "Frontend (Intern)",
-        questions: questionsIT.Intern.Frontend,
-      },
-      {
-        topic: "Backend (Intern)",
-        questions: questionsIT.Intern.Backend,
-      },
-      {
-        topic: "Frontend (Junior)",
-        questions: questionsIT.Junior.Frontend,
-      },
-      {
-        topic: "Backend (Junior)",
-        questions: questionsIT.Junior.Backend,
-      },
-      {
-        topic: "DevOps (Junior)",
-        questions: questionsIT.Junior.DevOps,
-      },
-      {
-        topic: "Security (Senior)",
-        questions: questionsIT.Senior.Security,
-      },
-    ],
+  // fetch all docs for activeCategory and build structure { level: { role: questions[] } }
+  useEffect(() => {
+    let mounted = true
+    const fetchForCategory = async () => {
+      setLoading(true)
+      try {
+        const q = query(collection(db, "questions"), where("category", "==", activeCategory))
+        const snap = await getDocs(q)
+        const structured: Record<string, Record<string, string[]>> = {}
+
+        snap.forEach((d) => {
+          const data = d.data() as any
+          const lvl = data.level || "General"
+          const rl = data.role || "General"
+          const qs = Array.isArray(data.questions) ? data.questions : []
+
+          if (!structured[lvl]) structured[lvl] = {}
+          structured[lvl][rl] = qs
+        })
+
+        if (!mounted) return
+        const levelKeys = Object.keys(structured)
+        setLevels(levelKeys)
+        const defaultLevel = levelKeys[0] || null
+        setSelectedLevel(defaultLevel)
+
+        if (defaultLevel) {
+          const roleKeys = Object.keys(structured[defaultLevel])
+          setRolesList(roleKeys)
+          const defaultRole = roleKeys[0] || null
+          setSelectedRole(defaultRole)
+          setQuestionsList(defaultRole ? structured[defaultLevel][defaultRole] : [])
+        } else {
+          setRolesList([])
+          setSelectedRole(null)
+          setQuestionsList([])
+        }
+      } catch (err) {
+        console.error("Error fetching questions:", err)
+        setLevels([])
+        setRolesList([])
+        setSelectedLevel(null)
+        setSelectedRole(null)
+        setQuestionsList([])
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    fetchForCategory()
+    return () => {
+      mounted = false
+    }
+  }, [activeCategory])
+
+  // when selectedLevel changes, update roles and default role/questions
+  useEffect(() => {
+    if (!selectedLevel) return
+    const fetchRolesForLevel = async () => {
+      setLoading(true)
+      try {
+        const q = query(
+          collection(db, "questions"),
+          where("category", "==", activeCategory),
+          where("level", "==", selectedLevel)
+        )
+        const snap = await getDocs(q)
+        const roleKeys: string[] = []
+        const mapRoleToQs: Record<string, string[]> = {}
+        snap.forEach((d) => {
+          const data = d.data() as any
+          const rl = data.role || "General"
+          const qs = Array.isArray(data.questions) ? data.questions : []
+          roleKeys.push(rl)
+          mapRoleToQs[rl] = qs
+        })
+
+        setRolesList(roleKeys)
+        const defaultRole = roleKeys[0] || null
+        setSelectedRole(defaultRole)
+        setQuestionsList(defaultRole ? mapRoleToQs[defaultRole] : [])
+      } catch (err) {
+        console.error("Error fetching roles for level:", err)
+        setRolesList([])
+        setSelectedRole(null)
+        setQuestionsList([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchRolesForLevel()
+  }, [selectedLevel, activeCategory])
+
+  // when user clicks a role, fetch that questions (or use already loaded)
+  const handleRoleClick = async (roleName: string) => {
+    setSelectedRole(roleName)
+    // try to get questions from Firestore document (id built same as upload)
+    try {
+      setLoading(true)
+      const id = `${activeCategory}_${selectedLevel}_${roleName}`.replace(/\s+/g, "_")
+      const docRef = doc(db, "questions", id)
+      const snap = await getDoc(docRef)
+      if (snap.exists()) {
+        const data = snap.data() as any
+        setQuestionsList(Array.isArray(data.questions) ? data.questions : [])
+      } else {
+        // fallback: query
+        const q = query(
+          collection(db, "questions"),
+          where("category", "==", activeCategory),
+          where("level", "==", selectedLevel),
+          where("role", "==", roleName)
+        )
+        const qsnap = await getDocs(q)
+        let found: string[] = []
+        qsnap.forEach((d) => {
+          const data = d.data() as any
+          if (Array.isArray(data.questions)) found = data.questions
+        })
+        setQuestionsList(found)
+      }
+    } catch (err) {
+      console.error("Error loading questions for role:", err)
+      setQuestionsList([])
+    } finally {
+      setLoading(false)
+    }
   }
+
+  // categories list: you can expand later or fetch dynamically
+  const categories = ["Information Technology", "Language English"]
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
-      {/* Sidebar */}
+      {/* --- Global Sidebar (KEEPING EXACT LOGIC) --- */}
       <Box
         w="250px"
         borderRight="1px solid"
@@ -196,55 +292,99 @@ export default function Specialized1Page() {
         </Box>
       </Box>
 
-      {/* Main content */}
+      {/* --- Main Content: category -> levels -> left=roles, right=questions --- */}
       <Box flex="1" p={6} bg="white" overflow="auto">
         {/* Categories */}
         <Flex justify="center" gap={6} mb={6}>
-          {Object.keys(data).map((cat) => (
+          {categories.map((cat) => (
             <Button
               key={cat}
-              variant="outline"
-              border="1px solid"
-              colorScheme={activeCategory === cat ? "teal" : "gray"}
-              onClick={() => setActiveCategory(cat)}
+              variant={activeCategory === cat ? "solid" : "outline"}
+              colorScheme={activeCategory === cat ? "teal" : undefined}
+              onClick={() => {
+                setActiveCategory(cat)
+                // selectedLevel / selectedRole will be set by fetch effect
+              }}
             >
               {cat}
             </Button>
           ))}
         </Flex>
 
-        {/* Topics + Questions */}
-        <VStack align="stretch" spacing={6}>
-          {data[activeCategory]?.map((topic, idx) => (
-            <Box
-              key={idx}
-              border="1px solid"
-              borderColor="gray.300"
-              borderRadius="md"
-              p={4}
-            >
-              <Text fontWeight="bold" mb={3}>
-                {topic.topic}
-              </Text>
-              <Flex wrap="wrap" gap={4}>
-                {topic.questions.map((q: string, i: number) => (
+        {/* Levels row */}
+        <Flex justify="center" gap={4} mb={6} wrap="wrap">
+          {loading ? (
+            <Spinner />
+          ) : levels.length === 0 ? (
+            <Text color="gray.500">No levels found for {activeCategory}</Text>
+          ) : (
+            levels.map((lvl) => (
+              <Button
+                key={lvl}
+                variant={selectedLevel === lvl ? "solid" : "outline"}
+                onClick={() => setSelectedLevel(lvl)}
+              >
+                {lvl}
+              </Button>
+            ))
+          )}
+        </Flex>
+
+        {/* Left: roles, Right: questions */}
+        <Flex gap={6} align="flex-start">
+          {/* Roles list (left column) */}
+          <Box w="320px" border="1px solid" borderColor="gray.200" borderRadius="md" p={4}>
+            <Text fontWeight="bold" mb={3}>
+              Roles
+            </Text>
+            {loading ? (
+              <Spinner />
+            ) : rolesList.length === 0 ? (
+              <Text color="gray.500">No roles</Text>
+            ) : (
+              <VStack align="stretch">
+                {rolesList.map((r) => (
+                  <Button
+                    key={r}
+                    variant={selectedRole === r ? "solid" : "ghost"}
+                    justifyContent="flex-start"
+                    onClick={() => handleRoleClick(r)}
+                  >
+                    {r}
+                  </Button>
+                ))}
+              </VStack>
+            )}
+          </Box>
+
+          {/* Questions (right column) */}
+          <Box flex="1" border="1px solid" borderColor="gray.200" borderRadius="md" p={4}>
+            <Text fontWeight="bold" mb={3}>
+              {selectedRole ? `${selectedRole} - ${selectedLevel}` : "Questions"}
+            </Text>
+
+            {loading ? (
+              <Spinner />
+            ) : questionsList.length === 0 ? (
+              <Text color="gray.500">No questions for selected role</Text>
+            ) : (
+              <VStack align="stretch" spacing={4}>
+                {questionsList.map((q, i) => (
                   <Box
                     key={i}
-                    flex="1"
-                    minW="250px"
                     p={3}
                     border="1px solid"
                     borderColor="gray.200"
                     borderRadius="md"
-                    _hover={{ bg: "gray.50" }}
+                    bg="gray.50"
                   >
-                    {q}
+                    <Text>{q}</Text>
                   </Box>
                 ))}
-              </Flex>
-            </Box>
-          ))}
-        </VStack>
+              </VStack>
+            )}
+          </Box>
+        </Flex>
       </Box>
     </Flex>
   )
