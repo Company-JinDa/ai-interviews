@@ -4,125 +4,128 @@ import {
   Box,
   Flex,
   Text,
-  VStack,
+  Button,
+  Tabs,
+  TabList,
+  Tab,
+  TabPanels,
+  TabPanel,
   HStack,
   Image,
-  Button,
+  Icon,
+  VStack,
 } from "@chakra-ui/react"
-import { useRouter } from "next/navigation"
-import { useLang } from "@/app/context/LangContext/LangContext"
-import { translations } from "@/app/lib/translations"
+import { FaHome, FaMicrophone, FaPlay } from "react-icons/fa"
+import { MdDirectionsBike } from "react-icons/md"
+import { MdOutlineKeyboardArrowRight } from "react-icons/md"
+import Link from "next/link"
 
-export default function PackageCompany() {
-  const router = useRouter()
-  const { lang } = useLang()
-  const t = translations[lang]
-
+export default function Specialized2() {
   return (
-    <Flex
-      direction="column"
-      minH="100vh"
-      border="2px solid"
-      borderColor="blue.300"
-      p={4}
-      align="center"
-    >
-      {/* Logo + Title */}
-      <HStack
-        spacing={3}
-        cursor="pointer"
-        mb={4}
-        onClick={() => router.push("/auth/dashboard")}
-      >
-        <Image src="/logo.png" alt="logo" boxSize="50px" borderRadius="full" />
+    <Box p={4} border="1px solid #1E90FF" minH="100vh" bg="white">
+      {/* Header */}
+      <Flex align="center" borderBottom="1px solid black" pb={2}>
+        <Image
+          src="/logo.png"
+          alt="Logo"
+          boxSize="40px"
+          mr={2}
+          borderRadius="full"
+        />
         <Text fontSize="2xl" fontWeight="bold">
           AI-Interview
         </Text>
+      </Flex>
+
+      {/* Breadcrumb */}
+      <HStack spacing={2} mt={2} mb={4}>
+        <Link href="/" style={{ display: "flex", alignItems: "center" }}>
+          <Icon as={FaHome} boxSize={5} mr={1} />
+          <Text>Home</Text>
+        </Link>
+        <Icon as={MdOutlineKeyboardArrowRight} />
+        <Icon as={MdDirectionsBike} boxSize={5} />
+        <Text>Specialized Practice</Text>
+        <Icon as={MdOutlineKeyboardArrowRight} />
+        <Icon as={FaMicrophone} boxSize={5} />
+        <Text>Language English</Text>
+        <Icon as={MdOutlineKeyboardArrowRight} />
+        <Icon as={FaPlay} color="green.400" />
+        <Text>Why is it that some people don’t make plans?</Text>
       </HStack>
 
-      <Box w="100%" borderBottom="1px solid black" mb={6}></Box>
-
-      {/* What's cool section */}
-      <Box
-        border="1px solid"
-        borderColor="blue.200"
-        p={6}
-        borderRadius="md"
-        maxW="700px"
-        mb={10}
-        textAlign="center"
-      >
-        <Text fontSize="xl" fontWeight="bold" mb={2}>
-          {t.packageCompanyTitle}
-        </Text>
-        <Text mb={4} color="gray.600">
-          {t.packageCompanyEmail}
-        </Text>
-
-        <VStack spacing={3} align="start">
-          {t.packageCompanyFeatures.map((feature: string, idx: number) => (
-            <HStack key={idx} align="start">
-              <Text fontSize="2xl" color="green.500">✔</Text>
-              <Text>{feature}</Text>
-            </HStack>
-          ))}
-        </VStack>
-      </Box>
-
-      {/* Packages */}
-      <Flex justify="center" gap={10}>
+      {/* Main Content */}
+      <Flex>
+        {/* Left Side */}
         <Box
-          border="1px solid"
-          borderColor="blue.200"
-          p={6}
-          w="250px"
-          textAlign="center"
-          borderRadius="md"
+          flex="2"
+          borderRight="1px solid black"
+          minH="70vh"
+          position="relative"
+          display="flex"
+          flexDirection="column"
+          justifyContent="center"
+          alignItems="center"
         >
-          <Text fontWeight="bold" fontSize="lg" color="blue.700">
-            {t.packages.threeMonth.title}
+          <Text fontSize="lg" textAlign="center" mb={20}>
+            Click the{" "}
+            <Text as="span" fontWeight="bold" color="blue.500">
+              Start
+            </Text>{" "}
+            button below to answer the question.
           </Text>
-          <Text fontSize="sm" color="gray.600" mb={2}>
-            {t.packages.threeMonth.days}
-          </Text>
-          <Text fontSize="2xl" fontWeight="bold" mb={4}>
-            {t.packages.threeMonth.title}
-          </Text>
-          <Button
-            colorScheme="blue"
-            w="full"
-            onClick={() => router.push("/pages/purchaseCompany")}
-          >
-            {t.packages.buyVip}
-          </Button>
+
+          <Flex justify="center" position="absolute" bottom="10" left="0" right="0">
+            <Button
+              size="lg"
+              color="white"
+              bg="blue.400"
+              borderRadius="full"
+              px={10}
+              py={6}
+              fontSize="xl"
+              _hover={{ bg: "blue.500" }}
+            >
+              Start
+            </Button>
+          </Flex>
         </Box>
 
-        <Box
-          border="1px solid"
-          borderColor="blue.200"
-          p={6}
-          w="250px"
-          textAlign="center"
-          borderRadius="md"
-        >
-          <Text fontWeight="bold" fontSize="lg" color="blue.700">
-            {t.packages.sixMonth.title}
-          </Text>
-          <Text fontSize="sm" color="gray.600" mb={2}>
-            {t.packages.sixMonth.days}
-          </Text>
-          <Text fontSize="2xl" fontWeight="bold" mb={4}>
-            {t.packages.sixMonth.title}
-          </Text>
-          <Button
-            colorScheme="blue"
-            w="full"
-            onClick={() => router.push("/pages/purchaseCompany")}
-          >
-            {t.packages.buyVip}
-          </Button>
+        {/* Right Side */}
+        <Box flex="1" pl={4} borderLeft="1px solid black">
+          <Tabs variant="unstyled">
+            <TabList borderBottom="1px solid black">
+              <Tab
+                fontSize="lg"
+                _selected={{
+                  fontWeight: "bold",
+                  borderBottom: "2px solid black",
+                }}
+              >
+                Interview Results
+              </Tab>
+              <Tab
+                fontSize="lg"
+                ml={4}
+                _selected={{
+                  fontWeight: "bold",
+                  borderBottom: "2px solid black",
+                }}
+              >
+                AI Suggestions
+              </Tab>
+            </TabList>
+            <TabPanels>
+              <TabPanel>
+                <Text></Text>
+              </TabPanel>
+              <TabPanel>
+                <Text></Text>
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
         </Box>
       </Flex>
-    </Flex>
+    </Box>
   )
 }
