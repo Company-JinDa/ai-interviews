@@ -197,12 +197,10 @@ export default function Specialized1Page() {
     }
   }
 
-  // categories list: you can expand later or fetch dynamically
   const categories = ["Information Technology", "Language English"]
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
-      {/* --- Global Sidebar (KEEPING EXACT LOGIC) --- */}
       <Box
         w="250px"
         borderRight="1px solid"
@@ -292,9 +290,7 @@ export default function Specialized1Page() {
         </Box>
       </Box>
 
-      {/* --- Main Content: category -> levels -> left=roles, right=questions --- */}
       <Box flex="1" p={6} bg="white" overflow="auto">
-        {/* Categories */}
         <Flex justify="center" gap={6} mb={6}>
           {categories.map((cat) => (
             <Button
@@ -311,7 +307,6 @@ export default function Specialized1Page() {
           ))}
         </Flex>
 
-        {/* Levels row */}
         <Flex justify="center" gap={4} mb={6} wrap="wrap">
           {loading ? (
             <Spinner />
@@ -330,7 +325,6 @@ export default function Specialized1Page() {
           )}
         </Flex>
 
-        {/* Left: roles, Right: questions */}
         <Flex gap={6} align="flex-start">
           {/* Roles list (left column) */}
           <Box w="320px" border="1px solid" borderColor="gray.200" borderRadius="md" p={4}>
@@ -357,7 +351,6 @@ export default function Specialized1Page() {
             )}
           </Box>
 
-          {/* Questions (right column) */}
         <Box flex="1" border="1px solid" borderColor="gray.200" borderRadius="md" p={4}>
               <Text fontWeight="bold" mb={3}>
                 {selectedRole ? `${selectedRole} - ${selectedLevel}` : "Questions"}

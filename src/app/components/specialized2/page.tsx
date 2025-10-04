@@ -37,7 +37,6 @@ export default function Specialized2() {
 
   return (
     <Box p={4} border="1px solid #1E90FF" minH="100vh" bg="white">
-      {/* Header */}
       <Flex align="center" borderBottom="1px solid black" pb={2}>
         <Image
           src="/logo.png"
@@ -51,7 +50,6 @@ export default function Specialized2() {
         </Text>
       </Flex>
 
-      {/* Breadcrumb */}
       <HStack spacing={2} mt={2} mb={4}>
         <Button variant="ghost" p={0} onClick={() => router.push("/auth/dashboard")}>
           <Icon as={FaHome} boxSize={5} mr={1} />
@@ -76,9 +74,7 @@ export default function Specialized2() {
         </Text>
       </HStack>
 
-      {/* Main Content */}
       <Flex>
-        {/* Left Side */}
         <Box
           flex="2"
           borderRight="1px solid black"
@@ -131,7 +127,6 @@ export default function Specialized2() {
           </Flex>
         </Box>
 
-        {/* Right Side */}
         <Box flex="1" pl={4} borderLeft="1px solid black">
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
