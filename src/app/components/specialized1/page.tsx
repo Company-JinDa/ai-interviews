@@ -358,32 +358,49 @@ export default function Specialized1Page() {
           </Box>
 
           {/* Questions (right column) */}
-          <Box flex="1" border="1px solid" borderColor="gray.200" borderRadius="md" p={4}>
-            <Text fontWeight="bold" mb={3}>
-              {selectedRole ? `${selectedRole} - ${selectedLevel}` : "Questions"}
-            </Text>
+        <Box flex="1" border="1px solid" borderColor="gray.200" borderRadius="md" p={4}>
+              <Text fontWeight="bold" mb={3}>
+                {selectedRole ? `${selectedRole} - ${selectedLevel}` : "Questions"}
+              </Text>
 
-            {loading ? (
-              <Spinner />
-            ) : questionsList.length === 0 ? (
-              <Text color="gray.500">No questions for selected role</Text>
-            ) : (
-              <VStack align="stretch" spacing={4}>
-                {questionsList.map((q, i) => (
-                  <Box
-                    key={i}
-                    p={3}
-                    border="1px solid"
-                    borderColor="gray.200"
-                    borderRadius="md"
-                    bg="gray.50"
+              {loading ? (
+                <Spinner />
+              ) : questionsList.length === 0 ? (
+                <Text color="gray.500">No questions for selected role</Text>
+              ) : (
+                <VStack align="stretch" spacing={4}>
+                  {questionsList.map((q, i) => (
+                    <Box
+                      key={i}
+                      p={3}
+                      border="1px solid"
+                      borderColor="gray.200"
+                      borderRadius="md"
+                      bg="gray.50"
+                    >
+                      <Text>{q}</Text>
+                    </Box>
+                  ))}
+                  {/* Nút Luyện Tập */}
+                  <Button
+                    colorScheme="teal"
+                    size="lg"
+                    mt={5}
+                    onClick={() => {
+                      const params = new URLSearchParams({
+                        category: activeCategory,
+                        level: selectedLevel || "",
+                        role: selectedRole || "",
+                        questions: JSON.stringify(questionsList),
+                      }).toString()
+                      router.push(`/components/specialized2?${params}`)
+                    }}
                   >
-                    <Text>{q}</Text>
-                  </Box>
-                ))}
-              </VStack>
-            )}
-          </Box>
+                    Luyện Tập
+                  </Button>
+                </VStack>
+              )}
+            </Box>
         </Flex>
       </Box>
     </Flex>

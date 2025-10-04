@@ -19,8 +19,22 @@ import { FaHome, FaMicrophone, FaPlay } from "react-icons/fa"
 import { MdDirectionsBike } from "react-icons/md"
 import { MdOutlineKeyboardArrowRight } from "react-icons/md"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 
 export default function Specialized2() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const category = searchParams.get("category") || "Information Technology"
+  const level = searchParams.get("level") || ""
+  const role = searchParams.get("role") || ""
+  const questions = (() => {
+    try {
+      return JSON.parse(searchParams.get("questions") || "[]")
+    } catch {
+      return []
+    }
+  })()
+
   return (
     <Box p={4} border="1px solid #1E90FF" minH="100vh" bg="white">
       {/* Header */}
@@ -39,19 +53,27 @@ export default function Specialized2() {
 
       {/* Breadcrumb */}
       <HStack spacing={2} mt={2} mb={4}>
-        <Link href="/" style={{ display: "flex", alignItems: "center" }}>
+        <Button variant="ghost" p={0} onClick={() => router.push("/auth/dashboard")}>
           <Icon as={FaHome} boxSize={5} mr={1} />
           <Text>Home</Text>
-        </Link>
+        </Button>
         <Icon as={MdOutlineKeyboardArrowRight} />
-        <Icon as={MdDirectionsBike} boxSize={5} />
-        <Text>Specialized Practice</Text>
+        <Button variant="ghost" p={0} onClick={() => router.push("/components/specialized")}>
+          <Icon as={MdDirectionsBike} boxSize={5} />
+          <Text>Specialized Practice</Text>
+        </Button>
         <Icon as={MdOutlineKeyboardArrowRight} />
-        <Icon as={FaMicrophone} boxSize={5} />
-        <Text>Language English</Text>
+        <Button variant="ghost" p={0} onClick={() => router.push(`/components/specialized1?category=${category}`)}>
+          <Icon as={FaMicrophone} boxSize={5} />
+          <Text>
+            {category}
+          </Text>
+        </Button>
         <Icon as={MdOutlineKeyboardArrowRight} />
-        <Icon as={FaPlay} color="green.400" />
-        <Text>Why is it that some people don’t make plans?</Text>
+        <Icon as={FaPlay} color="teal.400" />
+        <Text>
+          {role ? `${role} - ${level}` : ""}
+        </Text>
       </HStack>
 
       {/* Main Content */}
@@ -67,24 +89,42 @@ export default function Specialized2() {
           justifyContent="center"
           alignItems="center"
         >
-          <Text fontSize="lg" textAlign="center" mb={20}>
+          <Text fontSize="lg" textAlign="center" mb={6}>
             Click the{" "}
-            <Text as="span" fontWeight="bold" color="blue.500">
+            <Text as="span" fontWeight="bold" color="teal.500">
               Start
             </Text>{" "}
-            button below to answer the question.
+            button below to answer the questions.
           </Text>
+
+          {/* Hiển thị từng câu hỏi */}
+          <VStack spacing={4} mb={10} w="full">
+            {questions.map((q: string, idx: number) => (
+              <Box
+                key={idx}
+                p={3}
+                border="1px solid"
+                borderColor="gray.200"
+                borderRadius="md"
+                bg="gray.50"
+                w="full"
+              >
+                <Text>{q}</Text>
+              </Box>
+            ))}
+          </VStack>
 
           <Flex justify="center" position="absolute" bottom="10" left="0" right="0">
             <Button
               size="lg"
+              mt={50}
               color="white"
-              bg="blue.400"
+              bg="teal.400"
               borderRadius="full"
               px={10}
               py={6}
               fontSize="xl"
-              _hover={{ bg: "blue.500" }}
+              _hover={{ bg: "teal.400" }}
             >
               Start
             </Button>
