@@ -381,7 +381,6 @@ export default function Specialized1Page() {
                       <Text>{q}</Text>
                     </Box>
                   ))}
-                  {/* Nút Luyện Tập */}
                   <Button
                     colorScheme="teal"
                     size="lg"
