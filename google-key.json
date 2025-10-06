@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "master-shore-474109-q3",
+  "private_key_id": "9373d2f0a433941ae1e0111af253789e39616b03",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC+B9yGIRuuk+RG\n+awcG4n1ZG5o7K5nf4Ct3GQ+ymwLhEqUM8Czshi4HJOLdyyY79LQyeUuZkWLUD54\nhdGExSxu+1jxxnGATMIQ9YKq578kxTz2pd8vevyEuNE2et1kc0hGccIpRgFkaVX2\nnRg+wHOBgRVtbTSKCDiAz6v64tKqKvV/cHgjS6Q5I6dNqhyNu0HOYMTBXa+jGC/r\n9j84TwtyJGvQZuK8exmpIy4KBnqA5bhvl6P6PWxXPwvzJmag1+tyGESiFDS5wqgw\nJKX7NicwhvPrGkJWzcGwbvvbUnAH6tzcVDfOlEnCR+LFg2asA4DV2dwRT5FCgzui\n3tPTi+djAgMBAAECggEAFKLr6tD7nZjH6IFClIbVE4YFi3VwdyLciYTuifcXhqSm\nKLP6EEmd75iC2VlmyXD51tyl+8T1dmyPbC00FJQJAEBhZ1giiUlMpeTTfNXP5yFY\nPnzC4PgdJhif96eeFUODrMq7yBmnGw1pXW+v61ig8oZfGlQKqZa89BgZWBR7xijV\n5t2UbORh/xckdXm6lqwfjy5uWDidwymAtQLUWreNLzTdrfOm/+VW8k+Q47bx0e8v\njhspgqrhmwOtnLyOzbMd2eOye3m5BB8SHVvCfI6aB2LZPo4a0F0fV8Vho3i691fo\ndqRSl4jbdVt4oNh++scrFzB3XF6DyyXwckb54ANdiQKBgQD34b7xhBG3VeJoNPTD\nOG1AVWr4bm3+QJBCHLeI7hbDhuh2E2CneUNyPsc8zLaYyt01u+iIca4Y9qcVUJDs\nukDeBI8aUA0Koz4shf5SRUmVa/YgAk9blQrNUrr4a4AH06MaMRZPHz7HuBXQrutp\ncpmKJw8ndPpsgOGf7c8X8i4H7wKBgQDEQRa8TvvPDSe5TRMDWZh0rJPnfnYvpfcw\nhAxEyMQ1ZyZYjht0prwaGeAW9lAUCantYQjd9WRCcGkJJRPkXQHBmjogGUJ2K6o1\nE136fj0xjEbZr5+UeeU1cKIoT8JZPOrtoi9eWT27Xl5QhWnYfSP4ZYAelbfyqXgK\nj0cM9SRDzQKBgQC3+NO+bEa5ywQ+Uw9V1ItBNCQwPcVk7oYiiy2scwhyFa5x8+/I\nXDeykuVMOqNKw0VqnAv5OGX+IRHgv+rPx2xdWwTago8rVfzPDqOya7oxK+9/0jcT\nwYpC2SPrO93J8UkcJ1JnZskxcW6/cxNFL8jEwDh/EFLMNNs/1z/cheGkAQKBgAHc\nEAgWw4IRwNebqFt2xOAOJpSh+SK4cuAt0CPytxE+efmK1y3CyrOAnUP6b4XRFaAf\nNENOKPYMNKKWjFq0muinundFZgDSpxk7pr9R5OiMSLuVU3DHuulHuPGi19eaoStB\nRyugstoMqd4fdYJMpUOcSpt/la+h9XY8J1MzG3XdAoGAC1CdohTRJ0jve+LiDcMb\npOPzqLVkaMQjUhzoUdYbgd28pJINTA0ApuVCMH/X8LnG0kaHed6AcM5JVJ+8almy\nEmw0i0pkoMw/k36MwVXTcG6Q23Bqj+er5qNdOvoZVV28FzkSLkt906H2TLM4i+vv\nzLHqUuGAnSif2IxcYsZPezM=\n-----END PRIVATE KEY-----\n",
+  "client_email": "ai-interview-key@master-shore-474109-q3.iam.gserviceaccount.com",
+  "client_id": "104201197945900499065",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ai-interview-key%40master-shore-474109-q3.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
