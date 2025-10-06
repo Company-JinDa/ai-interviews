@@ -4,7 +4,6 @@ import { getAuth } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
 
-// Cấu hình Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyCaWIB51m3m8Sv0u_jtvXEd41c064FhYak",
   authDomain: "ai-interview-5863c.firebaseapp.com",

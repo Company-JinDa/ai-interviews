@@ -28,8 +28,8 @@
         "./src/*"
       ]
     },
-    "outDir": "dist",                        // thêm từ Node config
-    "forceConsistentCasingInFileNames": true // thêm từ Node config
+    "outDir": "dist",                        
+    "forceConsistentCasingInFileNames": true 
   },
   "include": [
     "next-env.d.ts",
