@@ -33,7 +33,7 @@ import {
   query as firestoreQuery,
 } from "firebase/firestore";
 
-// Dynamic import react-mic
+// ⚙️ Dynamic import react-mic
 const ReactMic: any = dynamic(
   async () => {
     const mod = await import("react-mic");
@@ -47,6 +47,7 @@ export default function Specialized2() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
+  // Query params
   const category = searchParams.get("category") || "Information Technology";
   const level = searchParams.get("level") || "";
   const role = searchParams.get("role") || "";
@@ -58,6 +59,7 @@ export default function Specialized2() {
     }
   })();
 
+  // State
   const [currentQ, setCurrentQ] = useState<number>(0);
   const [recording, setRecording] = useState<boolean>(false);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -69,7 +71,19 @@ export default function Specialized2() {
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
   const timerRef = useRef<any>(null);
 
-  // 🔹 Check & request microphone permission
+  // 🧩 Helper: convert blob → base64
+  const blobToBase64 = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+  // 🎤 Check microphone
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
     try {
@@ -81,8 +95,7 @@ export default function Specialized2() {
       setHasMicPermission(false);
       toast({
         title: "Microphone chưa được phép",
-        description:
-          "Hãy cho phép truy cập micro trong trình duyệt (biểu tượng camera/micro trên thanh địa chỉ).",
+        description: "Hãy cho phép truy cập micro trong trình duyệt (icon micro trên thanh địa chỉ).",
         status: "error",
         position: "top",
       });
@@ -90,9 +103,8 @@ export default function Specialized2() {
     }
   };
 
-  // 🔹 Play question (TTS)
+  // 🗣️ Play question (TTS)
   const playQuestion = async (text: string): Promise<void> => {
-    if (typeof window === "undefined") return;
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
@@ -107,16 +119,16 @@ export default function Specialized2() {
         audio.play().catch(() => resolve());
       });
     } catch {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-US";
       return new Promise<void>((resolve) => {
-        if (!("speechSynthesis" in window)) return resolve();
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "en-US";
         u.onend = () => resolve();
         speechSynthesis.speak(u);
       });
     }
   };
 
+  // 🔔 Beep sound
   const playBeep = () => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -135,39 +147,36 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // 🔹 Start interview flow (only once)
+  // 🚀 Start interview
   const handleStart = async () => {
     if (started) return;
     const ok = await ensureMicPermission();
     if (!ok) return;
     setStarted(true);
+    setAnswers([]);
     await runQuestionCycle(0);
   };
 
-  // 🔹 Run one full question cycle (ask → beep → record)
+  // 🧭 Run full question cycle
   const runQuestionCycle = async (index: number) => {
     if (index >= questions.length) {
-      finishInterview();
+      await finishInterview();
       return;
     }
-
     setCurrentQ(index);
     setCountdown(60);
 
-    // 1️⃣ Play question (TTS)
     await playQuestion(questions[index]);
-
-    // 2️⃣ Beep & start recording
     playBeep();
-    await new Promise((res) => setTimeout(res, 500)); // short delay after beep
-    startRecording(index);
+    await new Promise((r) => setTimeout(r, 500));
+
+    startRecording();
   };
 
-  // 🔹 Start recording
-  const startRecording = (index: number) => {
+  // 🎙️ Start recording
+  const startRecording = () => {
     setRecording(true);
     if (timerRef.current) clearInterval(timerRef.current);
-
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -180,60 +189,61 @@ export default function Specialized2() {
     }, 1000);
   };
 
-  // 🔹 When recording stops
+  // 🛑 When stop recording
   const onStop = async (recordedBlob: any) => {
-    if (!started) return; // ignore if not in flow
+    if (!started) return;
     setIsLoading(true);
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(recordedBlob.blob);
-      reader.onloadend = async () => {
-        const base64Audio = (reader.result as string).split(",")[1];
+      const base64Audio = await blobToBase64(recordedBlob.blob);
 
-        const res = await fetch("/api/stt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio: base64Audio }),
-        });
-        const data = await res.json();
-        const text = data.transcription || "";
+      // 🎧 Gửi đến STT API
+      const res = await fetch("/api/stt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audio: base64Audio }),
+      });
+      const data = await res.json();
+      const text = data.transcription?.trim() || "(no speech detected)";
+      setAnswers((prev) => [...prev, text]);
 
-        setAnswers((prev) => [...prev, text]);
+      // 🔥 Lưu vào Firestore
+      const uid =
+        auth.currentUser?.uid ||
+        `guest-${localStorage.getItem("guestUid") ||
+          (() => {
+            const g = `guest-${Date.now()}`;
+            localStorage.setItem("guestUid", g);
+            return g;
+          })()}`;
+      const userDocRef = doc(db, "users", uid);
+      const historyColRef = collection(userDocRef, "history");
 
-        const uid =
-          auth.currentUser?.uid ||
-          `guest-${localStorage.getItem("guestUid") ||
-            (() => {
-              const g = `guest-${Date.now()}`;
-              localStorage.setItem("guestUid", g);
-              return g;
-            })()}`;
+      await addDoc(historyColRef, {
+        question: questions[currentQ],
+        answer: text,
+        createdAt: serverTimestamp(),
+      });
 
-        const userDocRef = doc(db, "users", uid);
-        const historyColRef = collection(userDocRef, "history");
-        await addDoc(historyColRef, {
-          question: questions[currentQ],
-          answer: text,
-          createdAt: serverTimestamp(),
-        });
-
-        const next = currentQ + 1;
-        if (next < questions.length) {
-          await runQuestionCycle(next);
-        } else {
-          await finishInterview();
-        }
-      };
+      const next = currentQ + 1;
+      if (next < questions.length) {
+        await runQuestionCycle(next);
+      } else {
+        await finishInterview();
+      }
     } catch (err) {
-      console.error(err);
+      console.error("❌ STT Error:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🔹 Finish entire interview
+  // 🏁 Finish interview
   const finishInterview = async () => {
+    clearInterval(timerRef.current);
+    setRecording(false);
+    setStarted(false);
     setIsLoading(true);
+
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
@@ -248,6 +258,7 @@ export default function Specialized2() {
         `guest-${localStorage.getItem("guestUid") || `guest-${Date.now()}`}`;
       const userDocRef = doc(db, "users", uid);
       const interviewsRef = collection(userDocRef, "interviews");
+
       await addDoc(interviewsRef, {
         questions,
         answers,
@@ -255,47 +266,58 @@ export default function Specialized2() {
         feedback: data?.feedback ?? null,
         createdAt: serverTimestamp(),
       });
-    } catch (e) {
-      console.error(e);
+
+      toast({
+        title: "Interview finished!",
+        description: "Results saved successfully.",
+        status: "success",
+        duration: 2000,
+      });
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🔹 Realtime Firestore listener
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    let unsub: (() => void) | null = null;
-    (async () => {
-      const uid =
-        auth.currentUser?.uid ||
-        (localStorage.getItem("guestUid") ||
-          (() => {
-            const g = `guest-${Date.now()}`;
-            localStorage.setItem("guestUid", g);
-            return g;
-          })());
-      const userDocRef = doc(db, "users", uid);
-      const histCol = collection(userDocRef, "history");
-      const q = firestoreQuery(histCol, orderBy("createdAt", "asc"));
-      unsub = onSnapshot(q, (snap) => {
-        const arr: any[] = [];
-        snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-        setHistoryRealtime(arr);
-      });
-    })();
-    return () => {
-      if (unsub) unsub();
-    };
-  }, []);
+  // 🔄 Realtime Firestore
+  // 🔄 Realtime Firestore listener — fixed version
+useEffect(() => {
+  let unsub: (() => void) | undefined;
 
-  // 🔹 On mount
+  (async () => {
+    const uid =
+      auth.currentUser?.uid ||
+      (localStorage.getItem("guestUid") ||
+        (() => {
+          const g = `guest-${Date.now()}`;
+          localStorage.setItem("guestUid", g);
+          return g;
+        })());
+
+    const userDocRef = doc(db, "users", uid);
+    const histCol = collection(userDocRef, "history");
+    const q = firestoreQuery(histCol, orderBy("createdAt", "asc"));
+
+    unsub = onSnapshot(q, (snap) => {
+      const arr: any[] = [];
+      snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+      setHistoryRealtime(arr);
+    });
+  })();
+
+  return () => {
+    if (unsub) unsub(); // ✅ luôn trả về void, không null
+  };
+}, []);
+
+
   useEffect(() => {
     ensureMicPermission();
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // ✅ UI
+  // ✅ UI giữ nguyên
   return (
     <Box p={4} border="1px solid #1E90FF" minH="100vh" bg="white">
       <Flex align="center" borderBottom="1px solid black" pb={2}>
@@ -324,7 +346,7 @@ export default function Specialized2() {
       </HStack>
 
       <Flex>
-        {/* Left side: Question and recording */}
+        {/* Left: Question & Recording */}
         <Box flex="2" borderRight="1px solid black" minH="70vh" position="relative" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
           {isLoading && <Spinner size="xl" color="teal.400" mb={4} />}
 
@@ -373,7 +395,7 @@ export default function Specialized2() {
           </Flex>
         </Box>
 
-        {/* Right side: Result and history */}
+        {/* Right: Result & History */}
         <Box flex="1" pl={4} borderLeft="1px solid black">
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
