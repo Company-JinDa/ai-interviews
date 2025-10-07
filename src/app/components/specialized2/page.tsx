@@ -47,7 +47,6 @@ export default function Specialized2() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
-  // Query params
   const category = searchParams.get("category") || "Information Technology";
   const level = searchParams.get("level") || "";
   const role = searchParams.get("role") || "";
@@ -59,7 +58,7 @@ export default function Specialized2() {
     }
   })();
 
-  // State
+  // 🎯 State
   const [currentQ, setCurrentQ] = useState<number>(0);
   const [recording, setRecording] = useState<boolean>(false);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -70,8 +69,13 @@ export default function Specialized2() {
   const [started, setStarted] = useState<boolean>(false);
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
   const timerRef = useRef<any>(null);
+  const silenceTimerRef = useRef<any>(null);
 
-  // 🧩 Helper: convert blob → base64
+  // 🔊 Silence detection config
+  const silenceThreshold = 0.02; // mức độ âm nhỏ hơn coi là im lặng
+  const silenceDuration = 2000; // 2 giây im lặng
+
+  // 🧩 Convert blob → base64
   const blobToBase64 = (blob: Blob) =>
     new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -83,7 +87,7 @@ export default function Specialized2() {
       reader.readAsDataURL(blob);
     });
 
-  // 🎤 Check microphone
+  // 🎤 Check mic
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
     try {
@@ -103,7 +107,7 @@ export default function Specialized2() {
     }
   };
 
-  // 🗣️ Play question (TTS)
+  // 🔈 TTS đọc câu hỏi
   const playQuestion = async (text: string): Promise<void> => {
     try {
       const res = await fetch("/api/tts", {
@@ -128,7 +132,7 @@ export default function Specialized2() {
     }
   };
 
-  // 🔔 Beep sound
+  // 🔔 Beep
   const playBeep = () => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -147,7 +151,7 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // 🚀 Start interview
+  // 🚀 Bắt đầu
   const handleStart = async () => {
     if (started) return;
     const ok = await ensureMicPermission();
@@ -157,12 +161,10 @@ export default function Specialized2() {
     await runQuestionCycle(0);
   };
 
-  // 🧭 Run full question cycle
+  // 🧭 Chu trình từng câu hỏi
   const runQuestionCycle = async (index: number) => {
-    if (index >= questions.length) {
-      await finishInterview();
-      return;
-    }
+    if (index >= questions.length) return await finishInterview();
+
     setCurrentQ(index);
     setCountdown(60);
 
@@ -173,7 +175,7 @@ export default function Specialized2() {
     startRecording();
   };
 
-  // 🎙️ Start recording
+  // 🎙️ Start record
   const startRecording = () => {
     setRecording(true);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -181,7 +183,7 @@ export default function Specialized2() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          setRecording(false); // trigger onStop
+          setRecording(false);
           return 0;
         }
         return prev - 1;
@@ -189,14 +191,12 @@ export default function Specialized2() {
     }, 1000);
   };
 
-  // 🛑 When stop recording
+  // 🛑 Khi stop
   const onStop = async (recordedBlob: any) => {
     if (!started) return;
     setIsLoading(true);
     try {
       const base64Audio = await blobToBase64(recordedBlob.blob);
-
-      // 🎧 Gửi đến STT API
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,7 +206,6 @@ export default function Specialized2() {
       const text = data.transcription?.trim() || "(no speech detected)";
       setAnswers((prev) => [...prev, text]);
 
-      // 🔥 Lưu vào Firestore
       const uid =
         auth.currentUser?.uid ||
         `guest-${localStorage.getItem("guestUid") ||
@@ -225,11 +224,8 @@ export default function Specialized2() {
       });
 
       const next = currentQ + 1;
-      if (next < questions.length) {
-        await runQuestionCycle(next);
-      } else {
-        await finishInterview();
-      }
+      if (next < questions.length) await runQuestionCycle(next);
+      else await finishInterview();
     } catch (err) {
       console.error("❌ STT Error:", err);
     } finally {
@@ -237,7 +233,7 @@ export default function Specialized2() {
     }
   };
 
-  // 🏁 Finish interview
+  // 🏁 Kết thúc
   const finishInterview = async () => {
     clearInterval(timerRef.current);
     setRecording(false);
@@ -280,46 +276,38 @@ export default function Specialized2() {
     }
   };
 
-  // 🔄 Realtime Firestore
-  // 🔄 Realtime Firestore listener — fixed version
-useEffect(() => {
-  let unsub: (() => void) | undefined;
-
-  (async () => {
-    const uid =
-      auth.currentUser?.uid ||
-      (localStorage.getItem("guestUid") ||
-        (() => {
-          const g = `guest-${Date.now()}`;
-          localStorage.setItem("guestUid", g);
-          return g;
-        })());
-
-    const userDocRef = doc(db, "users", uid);
-    const histCol = collection(userDocRef, "history");
-    const q = firestoreQuery(histCol, orderBy("createdAt", "asc"));
-
-    unsub = onSnapshot(q, (snap) => {
-      const arr: any[] = [];
-      snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
-      setHistoryRealtime(arr);
-    });
-  })();
-
-  return () => {
-    if (unsub) unsub(); // ✅ luôn trả về void, không null
-  };
-}, []);
-
+  // 🔄 Firestore realtime
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    (async () => {
+      const uid =
+        auth.currentUser?.uid ||
+        (localStorage.getItem("guestUid") ||
+          (() => {
+            const g = `guest-${Date.now()}`;
+            localStorage.setItem("guestUid", g);
+            return g;
+          })());
+      const userDocRef = doc(db, "users", uid);
+      const histCol = collection(userDocRef, "history");
+      const q = firestoreQuery(histCol, orderBy("createdAt", "asc"));
+      unsub = onSnapshot(q, (snap) => {
+        const arr: any[] = [];
+        snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
+        setHistoryRealtime(arr);
+      });
+    })();
+    return () => unsub && unsub();
+  }, []);
 
   useEffect(() => {
     ensureMicPermission();
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // ✅ UI giữ nguyên
+  // ✅ UI
   return (
-    <Box p={4} border="1px solid #1E90FF" minH="100vh" bg="white">
+    <Box p={4} minH="100vh" bg="white">
       <Flex align="center" borderBottom="1px solid black" pb={2}>
         <Image src="/logo.png" alt="Logo" boxSize="40px" mr={2} borderRadius="full" />
         <Text fontSize="2xl" fontWeight="bold">AI-Interview</Text>
@@ -346,7 +334,7 @@ useEffect(() => {
       </HStack>
 
       <Flex>
-        {/* Left: Question & Recording */}
+        {/* LEFT: Record */}
         <Box flex="2" borderRight="1px solid black" minH="70vh" position="relative" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
           {isLoading && <Spinner size="xl" color="teal.400" mb={4} />}
 
@@ -358,21 +346,37 @@ useEffect(() => {
           </VStack>
 
           {recording ? (
-            <Box textAlign="center" mb={4}>
-              <Text color="red.500">Đang ghi âm... ({countdown}s)</Text>
+            <Box textAlign="center" mb={4} w="100%">
+              <Text color="red.500">Recording... ({countdown}s)</Text>
               <ReactMic
                 key={currentQ}
                 record={recording}
                 onStop={onStop}
+                onData={(recordedChunk: any) => {
+                  const amplitude = Math.abs(recordedChunk?.amplitude ?? 0);
+                  if (amplitude < silenceThreshold) {
+                    if (!silenceTimerRef.current) {
+                      silenceTimerRef.current = setTimeout(() => {
+                        setRecording(false);
+                        clearTimeout(silenceTimerRef.current);
+                        silenceTimerRef.current = null;
+                      }, silenceDuration);
+                    }
+                  } else {
+                    clearTimeout(silenceTimerRef.current);
+                    silenceTimerRef.current = null;
+                  }
+                }}
                 mimeType="audio/webm"
                 strokeColor="#00b894"
                 backgroundColor="#f1f6f4"
+                visualSetting="frequencyBars"
               />
             </Box>
           ) : (
             <Box mb={4}>
               <Text color={hasMicPermission ? "gray.500" : "red.500"}>
-                {hasMicPermission ? "Sẵn sàng để ghi âm" : "Microphone chưa được phép"}
+                {hasMicPermission ? "Ready to record" : "Microphone not allowed"}
               </Text>
             </Box>
           )}
@@ -395,12 +399,16 @@ useEffect(() => {
           </Flex>
         </Box>
 
-        {/* Right: Result & History */}
+        {/* RIGHT: Result */}
         <Box flex="1" pl={4} borderLeft="1px solid black">
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
-              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Interview Results</Tab>
-              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>AI Suggestions</Tab>
+              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
+                Interview Results
+              </Tab>
+              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
+                AI Suggestions
+              </Tab>
             </TabList>
 
             <TabPanels>
