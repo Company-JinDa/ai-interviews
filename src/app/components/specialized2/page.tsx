@@ -70,10 +70,11 @@ export default function Specialized2() {
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
   const timerRef = useRef<any>(null);
   const silenceTimerRef = useRef<any>(null);
+  const recorderRef = useRef<any>(null);
 
   // 🔊 Silence detection config
-  const silenceThreshold = 0.02; // mức độ âm nhỏ hơn coi là im lặng
-  const silenceDuration = 2000; // 2 giây im lặng
+  const silenceThreshold = 0.02;
+  const silenceDuration = 2000;
 
   // 🧩 Convert blob → base64
   const blobToBase64 = (blob: Blob) =>
@@ -165,6 +166,7 @@ export default function Specialized2() {
   const runQuestionCycle = async (index: number) => {
     if (index >= questions.length) return await finishInterview();
 
+    console.log(`➡️ Start question ${index + 1}/${questions.length}`);
     setCurrentQ(index);
     setCountdown(60);
 
@@ -177,13 +179,15 @@ export default function Specialized2() {
 
   // 🎙️ Start record
   const startRecording = () => {
+    console.log("🎙️ Start recording...");
     setRecording(true);
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          setRecording(false);
+          console.log("⏱️ Time's up, stopping...");
+          stopRecording();
           return 0;
         }
         return prev - 1;
@@ -191,47 +195,56 @@ export default function Specialized2() {
     }, 1000);
   };
 
+  // 🛑 Stop record (ép dừng chắc chắn)
+  const stopRecording = () => {
+    console.log("🛑 stopRecording() called");
+    setRecording(false);
+    setTimeout(() => {
+      if (recorderRef.current && recorderRef.current.stopRecording) {
+        console.log("🧩 Manually triggering stopRecording()");
+        recorderRef.current.stopRecording();
+      }
+    }, 500);
+  };
+
   // 🛑 Khi stop
-  const onStop = async (recordedBlob: any) => {
-    if (!started) return;
-    setIsLoading(true);
-    try {
-      const base64Audio = await blobToBase64(recordedBlob.blob);
+ const onStop = async (recordedBlob: any) => {
+  console.log("🎤 onStop triggered:", recordedBlob);
+
+  try {
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      if (!reader.result) return; // 👈 fix null check
+      const base64Audio = (reader.result as string).split(",")[1];
+      console.log("📦 Sending audio to STT API...");
+
       const res = await fetch("/api/stt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ audio: base64Audio }),
       });
+
       const data = await res.json();
-      const text = data.transcription?.trim() || "(no speech detected)";
-      setAnswers((prev) => [...prev, text]);
+      console.log("🧠 STT response:", data);
 
-      const uid =
-        auth.currentUser?.uid ||
-        `guest-${localStorage.getItem("guestUid") ||
-          (() => {
-            const g = `guest-${Date.now()}`;
-            localStorage.setItem("guestUid", g);
-            return g;
-          })()}`;
-      const userDocRef = doc(db, "users", uid);
-      const historyColRef = collection(userDocRef, "history");
+      if (data.transcription) {
+        const newAnswers = [...answers, data.transcription];
+        setAnswers(newAnswers);
+        console.log("✅ Answer saved:", data.transcription);
 
-      await addDoc(historyColRef, {
-        question: questions[currentQ],
-        answer: text,
-        createdAt: serverTimestamp(),
-      });
-
-      const next = currentQ + 1;
-      if (next < questions.length) await runQuestionCycle(next);
-      else await finishInterview();
-    } catch (err) {
-      console.error("❌ STT Error:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        await new Promise((r) => setTimeout(r, 1000));
+        await runQuestionCycle(currentQ + 1);
+      } else {
+        console.warn("⚠️ No transcription returned");
+        await runQuestionCycle(currentQ + 1);
+      }
+    };
+    reader.readAsDataURL(recordedBlob.blob);
+  } catch (err) {
+    console.error("❌ onStop error:", err);
+    await runQuestionCycle(currentQ + 1);
+  }
+};
 
   // 🏁 Kết thúc
   const finishInterview = async () => {
@@ -239,6 +252,8 @@ export default function Specialized2() {
     setRecording(false);
     setStarted(false);
     setIsLoading(true);
+
+    console.log("🏁 Interview finished, sending answers:", answers);
 
     try {
       const res = await fetch("/api/evaluate", {
@@ -349,6 +364,7 @@ export default function Specialized2() {
             <Box textAlign="center" mb={4} w="100%">
               <Text color="red.500">Recording... ({countdown}s)</Text>
               <ReactMic
+                ref={recorderRef}
                 key={currentQ}
                 record={recording}
                 onStop={onStop}
@@ -357,7 +373,8 @@ export default function Specialized2() {
                   if (amplitude < silenceThreshold) {
                     if (!silenceTimerRef.current) {
                       silenceTimerRef.current = setTimeout(() => {
-                        setRecording(false);
+                        console.log("🤫 Silence detected, stopping...");
+                        stopRecording();
                         clearTimeout(silenceTimerRef.current);
                         silenceTimerRef.current = null;
                       }, silenceDuration);
@@ -367,10 +384,12 @@ export default function Specialized2() {
                     silenceTimerRef.current = null;
                   }
                 }}
-                mimeType="audio/webm"
+                mimeType="audio/webm;codecs=opus"
                 strokeColor="#00b894"
                 backgroundColor="#f1f6f4"
                 visualSetting="frequencyBars"
+                width={600}
+                height={150}
               />
             </Box>
           ) : (
