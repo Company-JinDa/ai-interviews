@@ -72,7 +72,6 @@ export default function Specialized2() {
   const silenceTimerRef = useRef<any>(null);
   const recorderRef = useRef<any>(null);
 
-  // 🔊 Silence detection config
   const silenceThreshold = 0.02;
   const silenceDuration = 2000;
 
@@ -88,7 +87,6 @@ export default function Specialized2() {
       reader.readAsDataURL(blob);
     });
 
-  // 🎤 Check mic
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
     try {
@@ -108,7 +106,6 @@ export default function Specialized2() {
     }
   };
 
-  // 🔈 TTS đọc câu hỏi
   const playQuestion = async (text: string): Promise<void> => {
     try {
       const res = await fetch("/api/tts", {
@@ -152,7 +149,6 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // 🚀 Bắt đầu
   const handleStart = async () => {
     if (started) return;
     const ok = await ensureMicPermission();
@@ -162,7 +158,6 @@ export default function Specialized2() {
     await runQuestionCycle(0);
   };
 
-  // 🧭 Chu trình từng câu hỏi
   const runQuestionCycle = async (index: number) => {
     if (index >= questions.length) return await finishInterview();
 
@@ -177,7 +172,6 @@ export default function Specialized2() {
     startRecording();
   };
 
-  // 🎙️ Start record
   const startRecording = () => {
     console.log("🎙️ Start recording...");
     setRecording(true);
@@ -195,7 +189,6 @@ export default function Specialized2() {
     }, 1000);
   };
 
-  // 🛑 Stop record (ép dừng chắc chắn)
   const stopRecording = () => {
     console.log("🛑 stopRecording() called");
     setRecording(false);
@@ -207,7 +200,6 @@ export default function Specialized2() {
     }, 500);
   };
 
-  // 🛑 Khi stop
  const onStop = async (recordedBlob: any) => {
   console.log("🎤 onStop triggered:", recordedBlob);
 
@@ -246,7 +238,6 @@ export default function Specialized2() {
   }
 };
 
-  // 🏁 Kết thúc
   const finishInterview = async () => {
     clearInterval(timerRef.current);
     setRecording(false);
@@ -291,7 +282,6 @@ export default function Specialized2() {
     }
   };
 
-  // 🔄 Firestore realtime
   useEffect(() => {
     let unsub: (() => void) | undefined;
     (async () => {
