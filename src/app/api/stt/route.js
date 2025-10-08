@@ -1,10 +1,9 @@
 import { SpeechClient } from "@google-cloud/speech";
 
-const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS || "{}");
-
-const client = new textToSpeech.TextToSpeechClient({
-  credentials,
+const client = new SpeechClient.SpeechClient({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
+
 
 
 export async function POST(req) {
