@@ -11,15 +11,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing content" }, { status: 400 })
     }
 
-    const q = query(collection(db, "transactions"), where("content", "==", content))
+    const cleanContent = content.trim().toLowerCase()
+    const q = query(
+      collection(db, "transactions"),
+      where("content", "==", cleanContent)
+    )
     const snap = await getDocs(q)
 
     if (!snap.empty) {
-      console.log("✅ Giao dịch thành công với content:", content)
+      console.log("✅ Giao dịch thành công với content:", cleanContent)
       return NextResponse.json({ status: "success" }, { status: 200 })
     }
 
-    console.log("⏳ Giao dịch chưa thấy:", content)
+    console.log("⏳ Giao dịch chưa thấy:", cleanContent)
     return NextResponse.json({ status: "pending" }, { status: 200 })
   } catch (err) {
     console.error("Check transaction error:", err)

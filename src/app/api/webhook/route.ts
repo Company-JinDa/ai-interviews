@@ -7,36 +7,39 @@ export async function POST(req: Request) {
     const body = await req.json()
     console.log("📩 Webhook SePay gửi đến:", body)
 
-    // --- Kiểm tra loại giao dịch ---
-    // Nếu SePay gửi cả tiền vào & tiền ra, ta chỉ nhận tiền vào thôi
+    // --- Bỏ qua nếu không phải tiền vào ---
     if (body.transfer_type && body.transfer_type !== "in") {
       console.log("🚫 Bỏ qua giao dịch tiền ra")
       return NextResponse.json({ ignored: true, reason: "Not incoming" }, { status: 200 })
     }
 
-    // --- Lấy dữ liệu chính từ webhook ---
-    const transId = body.transfer_id || body.transId || null
+    const transId = body.transfer_id || body.id || null
     const amount = Number(body.transfer_amount || body.amount || 0)
-    const content = body.transfer_content || body.content || ""
-    const status = body.transfer_status || body.status || "unknown"
+    const rawContent = body.transfer_content || body.content || ""
+    const status = (body.transfer_status || body.status || "").toLowerCase()
 
-    // --- Chỉ lưu khi giao dịch thành công ---
-    if (status.toLowerCase() !== "success") {
+    if (!rawContent) {
+      console.warn("⚠️ Không có nội dung giao dịch, bỏ qua.")
+      return NextResponse.json({ ignored: true, reason: "Missing content" }, { status: 200 })
+    }
+
+    // --- Chỉ lưu khi thành công ---
+    if (status !== "success") {
       console.log("⚠️ Giao dịch chưa thành công, bỏ qua.")
       return NextResponse.json({ ignored: true, reason: "Not success" }, { status: 200 })
     }
 
-    // --- Lưu giao dịch vào Firestore ---
+    const cleanContent = rawContent.trim().toLowerCase()
+
     await addDoc(collection(db, "transactions"), {
       transId,
       amount,
-      content,
+      content: cleanContent,
       status: "success",
       createdAt: new Date(),
     })
 
-    console.log("✅ Đã lưu giao dịch vào Firestore:", { transId, amount, content })
-
+    console.log("✅ Đã lưu giao dịch Firestore:", { transId, amount, cleanContent })
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (err) {
     console.error("❌ Webhook error:", err)
@@ -44,7 +47,6 @@ export async function POST(req: Request) {
   }
 }
 
-// Chặn method GET (chỉ cho phép POST)
 export async function GET() {
   return NextResponse.json({ error: "Method Not Allowed" }, { status: 405 })
 }
