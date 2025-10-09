@@ -2,14 +2,20 @@ import { NextResponse } from "next/server"
 import { db } from "@/app/lib/firebase"
 import { collection, addDoc } from "firebase/firestore"
 
+function normalizeContent(str: string) {
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "") // bỏ khoảng trắng
+    .replace(/[^a-z0-9\-_.]/g, "") // chỉ giữ chữ, số, -, _, .
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     console.log("📩 Webhook SePay gửi đến:", body)
 
-    // --- Bỏ qua nếu không phải tiền vào ---
     if (body.transfer_type && body.transfer_type !== "in") {
-      console.log("🚫 Bỏ qua giao dịch tiền ra")
       return NextResponse.json({ ignored: true, reason: "Not incoming" }, { status: 200 })
     }
 
@@ -18,18 +24,10 @@ export async function POST(req: Request) {
     const rawContent = body.transfer_content || body.content || ""
     const status = (body.transfer_status || body.status || "").toLowerCase()
 
-    if (!rawContent) {
-      console.warn("⚠️ Không có nội dung giao dịch, bỏ qua.")
-      return NextResponse.json({ ignored: true, reason: "Missing content" }, { status: 200 })
-    }
+    if (!rawContent) return NextResponse.json({ ignored: true, reason: "Missing content" }, { status: 200 })
+    if (status !== "success") return NextResponse.json({ ignored: true, reason: "Not success" }, { status: 200 })
 
-    // --- Chỉ lưu khi thành công ---
-    if (status !== "success") {
-      console.log("⚠️ Giao dịch chưa thành công, bỏ qua.")
-      return NextResponse.json({ ignored: true, reason: "Not success" }, { status: 200 })
-    }
-
-    const cleanContent = rawContent.trim().toLowerCase()
+    const cleanContent = normalizeContent(rawContent)
 
     await addDoc(collection(db, "transactions"), {
       transId,
@@ -45,8 +43,4 @@ export async function POST(req: Request) {
     console.error("❌ Webhook error:", err)
     return NextResponse.json({ error: "Failed to process webhook" }, { status: 500 })
   }
-}
-
-export async function GET() {
-  return NextResponse.json({ error: "Method Not Allowed" }, { status: 405 })
 }
