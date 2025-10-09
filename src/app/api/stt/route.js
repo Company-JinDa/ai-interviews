@@ -1,16 +1,17 @@
-import { SpeechClient } from "@google-cloud/speech";
+import { SpeechClient } from "@google-cloud/speech"
 
-const client = new SpeechClient.SpeechClient({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-});
-
-
+const client = new SpeechClient({
+  credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS || "{}"),
+})
 
 export async function POST(req) {
   try {
-    const { audio } = await req.json();
+    const { audio } = await req.json()
     if (!audio) {
-      return new Response(JSON.stringify({ error: "No audio data received" }), { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "No audio data received" }),
+        { status: 400 }
+      )
     }
 
     const request = {
@@ -21,20 +22,23 @@ export async function POST(req) {
         languageCode: "en-US",
         enableAutomaticPunctuation: true,
       },
-    };
+    }
 
-    const [response] = await client.recognize(request);
+    const [response] = await client.recognize(request)
     const transcription = response.results
       ?.map((r) => r.alternatives?.[0]?.transcript)
       .join(" ")
-      .trim();
+      .trim()
 
     return new Response(JSON.stringify({ transcription }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
-    });
+    })
   } catch (error) {
-    console.error("❌ STT API error:", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    console.error("❌ STT API error:", error)
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500 }
+    )
   }
 }
