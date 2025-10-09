@@ -10,12 +10,13 @@ import {
   VStack,
   useToast,
 } from "@chakra-ui/react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState } from "react"
 import { auth, db } from "@/app/lib/firebase"
 import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 
-export default function PurchaseCompany() {
+// 👉 Toàn bộ logic cũ của bạn giữ nguyên
+function PurchaseCompanyContent() {
   const router = useRouter()
   const toast = useToast()
   const searchParams = useSearchParams()
@@ -51,11 +52,7 @@ export default function PurchaseCompany() {
           const user = auth.currentUser
           if (user) {
             const uid = user.uid
-            const paymentRef = doc(
-              db,
-              "historyPayment",
-              `${uid}_${Date.now()}`
-            )
+            const paymentRef = doc(db, "historyPayment", `${uid}_${Date.now()}`)
             await setDoc(paymentRef, {
               uid,
               packageName,
@@ -152,5 +149,14 @@ export default function PurchaseCompany() {
         </Button>
       </Box>
     </Flex>
+  )
+}
+
+// ⚡ Bọc component trong <Suspense> để tránh lỗi build Next.js
+export default function PurchaseCompany() {
+  return (
+    <Suspense fallback={<div>Đang tải dữ liệu thanh toán...</div>}>
+      <PurchaseCompanyContent />
+    </Suspense>
   )
 }
