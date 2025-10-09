@@ -15,9 +15,11 @@ export async function GET(req: Request) {
     const snap = await getDocs(q)
 
     if (!snap.empty) {
+      console.log("✅ Giao dịch thành công với content:", content)
       return NextResponse.json({ status: "success" }, { status: 200 })
     }
 
+    console.log("⏳ Giao dịch chưa thấy:", content)
     return NextResponse.json({ status: "pending" }, { status: 200 })
   } catch (err) {
     console.error("Check transaction error:", err)

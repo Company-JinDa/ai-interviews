@@ -6,18 +6,34 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
 
-    // Lưu giao dịch vào Firestore
+    // Kiểm tra có dữ liệu hợp lệ không
+    const {
+      transfer_id,
+      transfer_amount,
+      transfer_content,
+      transfer_status,
+    } = body
+
+    // Log ra để test webhook thực tế
+    console.log("🔔 Webhook nhận từ SePay:", body)
+
+    // Nếu không có content hoặc status khác success thì bỏ qua
+    if (!transfer_content || transfer_status !== "success") {
+      return NextResponse.json({ ignored: true }, { status: 200 })
+    }
+
+    // Lưu vào Firestore collection "transactions"
     await addDoc(collection(db, "transactions"), {
-      transId: body.transId || null,
-      amount: body.amount || 0,
-      content: body.content || "",
+      transId: transfer_id || null,
+      amount: transfer_amount || 0,
+      content: transfer_content || "",
       status: "success",
       createdAt: new Date(),
     })
 
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (err) {
-    console.error("Webhook error:", err)
+    console.error("❌ Webhook error:", err)
     return NextResponse.json({ error: "Failed" }, { status: 500 })
   }
 }

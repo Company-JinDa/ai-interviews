@@ -8,14 +8,18 @@ import {
   Image,
   Button,
   VStack,
+  useToast,
 } from "@chakra-ui/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState } from "react"
-import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { auth, db } from "@/app/lib/firebase"
+import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 
 export default function PurchaseCompany() {
   const router = useRouter()
+  const toast = useToast()
   const searchParams = useSearchParams()
+
   const qr = searchParams?.get("qr") || ""
   const amount = searchParams?.get("price") || "0"
   const packageName = searchParams?.get("title") || "Unknown"
@@ -38,17 +42,49 @@ export default function PurchaseCompany() {
       try {
         const res = await fetch(`/api/check-transaction?content=${content}`)
         const data = await res.json()
+
         if (data.status === "success") {
           setStatus("success")
           clearInterval(interval)
-          setTimeout(() => router.push("/auth/dashboard"), 3000) // 3s sau về dashboard
+
+          // ✅ Lưu lịch sử thanh toán
+          const user = auth.currentUser
+          if (user) {
+            const uid = user.uid
+            const paymentRef = doc(
+              db,
+              "historyPayment",
+              `${uid}_${Date.now()}`
+            )
+            await setDoc(paymentRef, {
+              uid,
+              packageName,
+              amount: parseInt(amount),
+              content,
+              qr,
+              status: "success",
+              createdAt: serverTimestamp(),
+            })
+          }
+
+          toast({
+            title: "Thanh toán thành công!",
+            description: "Giao dịch của bạn đã được ghi nhận.",
+            status: "success",
+            duration: 4000,
+            isClosable: true,
+          })
+
+          // 3s sau về dashboard
+          setTimeout(() => router.push("/auth/dashboard"), 3000)
         }
       } catch (err) {
         console.error("Polling error:", err)
       }
     }, 5000) // check mỗi 5s
+
     return () => clearInterval(interval)
-  }, [content, router])
+  }, [content, router, amount, packageName, qr, toast])
 
   const minutes = Math.floor(timeLeft / 60)
   const seconds = timeLeft % 60
@@ -108,7 +144,10 @@ export default function PurchaseCompany() {
           </Text>
         )}
 
-        <Button colorScheme="red" onClick={() => router.push("/components/packageCompany")}>
+        <Button
+          colorScheme="red"
+          onClick={() => router.push("/components/packageCompany")}
+        >
           Hủy
         </Button>
       </Box>
