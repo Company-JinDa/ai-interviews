@@ -68,7 +68,6 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
-
   const handleGoogleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider()
@@ -79,7 +78,6 @@ export default function LoginPage() {
       setError(err.message)
     }
   }
-
   return (
     <Center minH="100vh" bg="gray.50" flexDirection="column">
       <Flex
@@ -172,7 +170,6 @@ export default function LoginPage() {
           </Text>
           <Divider />
         </HStack>
-
         <Button
           w="full"
           variant="outline"
