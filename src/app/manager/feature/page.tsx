@@ -1,5 +1,4 @@
 "use client"
-
 import {
   Box,
   Flex,
@@ -55,14 +54,12 @@ type Question = {
   expected: string
   editMode?: boolean
 }
-
 export default function ManagePage() {
   const router = useRouter()
   const [tab, setTab] = useState<"question" | "result">("question")
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedSpec, setSelectedSpec] = useState<string | null>(null)
 
-  // Questions lưu theo spec
   const [questionsMap, setQuestionsMap] = useState<Record<string, Question[]>>(
     {}
   )
