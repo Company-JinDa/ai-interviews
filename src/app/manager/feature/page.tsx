@@ -63,7 +63,6 @@ export default function ManagePage() {
   const [questionsMap, setQuestionsMap] = useState<Record<string, Question[]>>(
     {}
   )
-
   const [qInput, setQInput] = useState("")
   const [eInput, setEInput] = useState("")
   const [generatedLinks, setGeneratedLinks] = useState<Record<string, string>>(
