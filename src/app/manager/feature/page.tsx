@@ -70,7 +70,6 @@ export default function ManagePage() {
   )
   const [loading, setLoading] = useState(false)
   const [companyId, setCompanyId] = useState<string | null>(null)
-
   const toast = useToast()
 
   const currentQuestions = selectedSpec ? questionsMap[selectedSpec] || [] : []
