@@ -1,44 +1,36 @@
 import { SpeechClient } from "@google-cloud/speech";
+import fs from "fs";
+import path from "path";
+
+const keyPath = path.join(process.cwd(), "google-key.json");
+const credentials = JSON.parse(fs.readFileSync(keyPath, "utf8"));
 
 const client = new SpeechClient({
-  credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS || "{}"),
+  credentials,
 });
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    const { audio }: { audio: string } = await req.json();
-    if (!audio) {
-      return new Response(
-        JSON.stringify({ error: "No audio data received" }),
-        { status: 400 }
-      );
-    }
+    const body = await req.json();
+    const audioBase64 = body.audio.split(",")[1];
 
-    const request = {
-      audio: { content: audio.replace(/^data:audio\/\w+;base64,/, "") },
+    const [response] = await client.recognize({
+      audio: { content: audioBase64 },
       config: {
-        encoding: "WEBM_OPUS" as const,
-        sampleRateHertz: 48000,
-        languageCode: "en-US",
-        enableAutomaticPunctuation: true,
+        encoding: "WEBM_OPUS",
+        languageCode: "vi-VN",
       },
-    };
+    });
 
-    const [response] = await client.recognize(request);
-    const transcription =
-      response.results
-        ?.map((r) => r.alternatives?.[0]?.transcript)
-        .join(" ")
-        ?.trim() || "";
+    const transcription = response.results
+      ?.map(r => r.alternatives?.[0].transcript)
+      .join(" ") || "";
 
-    return new Response(JSON.stringify({ transcription }), {
-      status: 200,
+    return new Response(JSON.stringify({ text: transcription }), {
       headers: { "Content-Type": "application/json" },
     });
-  } catch (error: any) {
-    console.error("❌ STT API error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-    });
+  } catch (err) {
+    console.error("❌ STT Error:", err);
+    return new Response(JSON.stringify({ error: "STT failed" }), { status: 500 });
   }
 }
