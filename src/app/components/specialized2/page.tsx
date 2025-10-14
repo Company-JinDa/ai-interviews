@@ -200,6 +200,8 @@ export default function Specialized2() {
 
   // 🎧 Khi dừng ghi
   const onStop = async (recordedBlob: any) => {
+      console.log("onStop", recordedBlob);
+
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
