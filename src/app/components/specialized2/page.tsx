@@ -61,13 +61,16 @@ export default function Specialized2() {
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [amplitudeLevel, setAmplitudeLevel] = useState(0);
 
+  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const [monitoring, setMonitoring] = useState(false);
+
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
   const silenceThreshold = 0.02;
   const silenceDuration = 2000;
-  const silenceTimerRef = useRef<any>(null);
 
   // ✅ Mic permission
   const ensureMicPermission = async (): Promise<boolean> => {
@@ -158,7 +161,7 @@ export default function Specialized2() {
     startRecording();
   };
 
-  // 🎙️ Start recording (MediaRecorder)
+  // 🎙️ Start recording (MediaRecorder) + Amplitude monitor
   const startRecording = async () => {
     if (!micStream) {
       const ok = await ensureMicPermission();
@@ -169,6 +172,7 @@ export default function Specialized2() {
     setAmplitudeLevel(0);
     audioChunksRef.current = [];
 
+    // MediaRecorder setup
     const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm" });
     mediaRecorderRef.current = recorder;
 
@@ -177,19 +181,32 @@ export default function Specialized2() {
     };
 
     recorder.onstop = async () => {
+      setMonitoring(false);
+      if (audioContext) {
+        audioContext.close();
+        setAudioContext(null);
+        setAnalyser(null);
+      }
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
       await handleRecordedBlob(blob);
     };
 
-    // Monitor amplitude
-    const audioContext = new AudioContext();
-    const source = audioContext.createMediaStreamSource(micStream!);
-    const analyser = audioContext.createAnalyser();
-    source.connect(analyser);
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    // Amplitude monitor setup
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    setAudioContext(ctx);
+    const src = ctx.createMediaStreamSource(micStream!);
+    const ana = ctx.createAnalyser();
+    src.connect(ana);
+    setAnalyser(ana);
+    setMonitoring(true);
+
+    const dataArray = new Uint8Array(ana.frequencyBinCount);
+
+    let silenceTimeout: any = null;
+    let stopped = false;
 
     const monitor = () => {
-      analyser.getByteTimeDomainData(dataArray);
+      ana.getByteTimeDomainData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
         const v = (dataArray[i] - 128) / 128.0;
@@ -197,32 +214,38 @@ export default function Specialized2() {
       }
       const rms = Math.sqrt(sum / dataArray.length);
       setAmplitudeLevel(rms);
-      if (recording) requestAnimationFrame(monitor);
 
       // Detect silence
       if (rms < silenceThreshold) {
-        if (!silenceTimerRef.current) {
-          silenceTimerRef.current = setTimeout(() => {
-            stopRecording();
-            clearTimeout(silenceTimerRef.current);
-            silenceTimerRef.current = null;
+        if (!silenceTimeout) {
+          silenceTimeout = setTimeout(() => {
+            if (!stopped) {
+              stopped = true;
+              stopRecording();
+            }
           }, silenceDuration);
         }
       } else {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
+        clearTimeout(silenceTimeout);
+        silenceTimeout = null;
       }
+
+      if (recording && monitoring) requestAnimationFrame(monitor);
     };
     monitor();
 
     recorder.start();
 
+    // Countdown timer
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          stopRecording();
+          if (!stopped) {
+            stopped = true;
+            stopRecording();
+          }
           return 0;
         }
         return prev - 1;
@@ -232,39 +255,60 @@ export default function Specialized2() {
 
   // 🛑 Stop recording
   const stopRecording = () => {
+    setMonitoring(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
   };
 
-  // 🎧 Handle blob -> STT
+  // 🎧 Handle blob -> STT (Sửa lại: chỉ chuyển câu khi STT xong hoặc timeout)
   const handleRecordedBlob = async (blob: Blob) => {
+    setIsLoading(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        if (!reader.result) return;
+        if (!reader.result) {
+          setIsLoading(false);
+          await runQuestionCycle(currentQ + 1);
+          return;
+        }
         const base64Audio = (reader.result as string).split(",")[1];
 
-        const res = await fetch("/api/stt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio: base64Audio }),
-        });
-
-        const data = await res.json();
-        if (data.transcription) {
-          const newAnswers = [...answers, data.transcription];
-          setAnswers(newAnswers);
-          await new Promise((r) => setTimeout(r, 1000));
+        let sttTimeout = false;
+        const timeoutId = setTimeout(async () => {
+          sttTimeout = true;
+          setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
-        } else {
+        }, 12000); // 12s timeout
+
+        try {
+          const res = await fetch("/api/stt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ audio: base64Audio }),
+          });
+
+          clearTimeout(timeoutId);
+          if (sttTimeout) return;
+
+          const data = await res.json();
+          if (data.transcription && data.transcription.trim()) {
+            const newAnswers = [...answers, data.transcription];
+            setAnswers(newAnswers);
+          }
+          setIsLoading(false);
+          await new Promise((r) => setTimeout(r, 700));
+          await runQuestionCycle(currentQ + 1);
+        } catch (err) {
+          clearTimeout(timeoutId);
+          setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
         }
       };
       reader.readAsDataURL(blob);
     } catch (err) {
-      console.error("❌ handleRecordedBlob error:", err);
+      setIsLoading(false);
       await runQuestionCycle(currentQ + 1);
     }
   };
@@ -392,8 +436,16 @@ export default function Specialized2() {
               </Text>
               <Box bg="#f7fafc" p={4} borderRadius="lg" boxShadow="md" width="100%" maxW="700px" display="flex" flexDirection="column" alignItems="center">
                 <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" position="relative">
-                  <Box h="full" bg="teal.400" width={`${Math.min(amplitudeLevel * 600, 100)}%`} transition="width 0.1s linear" />
+                  <Box
+                    h="full"
+                    bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
+                    width={`${Math.min(amplitudeLevel * 600, 100)}%`}
+                    transition="width 0.1s linear"
+                  />
                 </Box>
+                <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
+                  {amplitudeLevel > silenceThreshold ? "Đang nói..." : "Đang im lặng..."}
+                </Text>
               </Box>
             </Box>
           ) : (
