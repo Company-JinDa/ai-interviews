@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import {
   Box,
   Flex,
@@ -33,15 +32,6 @@ import {
   query as firestoreQuery,
 } from "firebase/firestore";
 
-// ⚙️ Dynamic import react-mic
-const ReactMic: any = dynamic(
-  async () => {
-    const mod = await import("react-mic");
-    return mod.ReactMic;
-  },
-  { ssr: false }
-);
-
 export default function Specialized2() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,29 +58,25 @@ export default function Specialized2() {
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const [started, setStarted] = useState<boolean>(false);
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const [amplitudeLevel, setAmplitudeLevel] = useState(0);
 
   const timerRef = useRef<any>(null);
-  const silenceTimerRef = useRef<any>(null);
-  const recorderRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const silenceThreshold = 0.02;
   const silenceDuration = 2000;
+  const silenceTimerRef = useRef<any>(null);
 
-  // 🧩 Convert blob → base64
-  const blobToBase64 = (blob: Blob) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve((reader.result as string).split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-  // ✅ Kiểm tra quyền mic
+  // ✅ Mic permission
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      setMicStream(stream);
       setHasMicPermission(true);
       return true;
     } catch {
@@ -106,7 +92,7 @@ export default function Specialized2() {
     }
   };
 
-  // 🔊 Phát câu hỏi bằng TTS
+  // 🔊 Play question (TTS)
   const playQuestion = async (text: string): Promise<void> => {
     try {
       const res = await fetch("/api/tts", {
@@ -150,7 +136,7 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // ▶️ Bắt đầu
+  // ▶️ Start
   const handleStart = async () => {
     if (started) return;
     const ok = await ensureMicPermission();
@@ -160,7 +146,7 @@ export default function Specialized2() {
     await runQuestionCycle(0);
   };
 
-  // 🔁 Chu trình câu hỏi
+  // 🔁 Loop
   const runQuestionCycle = async (index: number) => {
     if (index >= questions.length) return await finishInterview();
     setCurrentQ(index);
@@ -172,9 +158,65 @@ export default function Specialized2() {
     startRecording();
   };
 
-  // 🎙️ Bắt đầu ghi âm
-  const startRecording = () => {
+  // 🎙️ Start recording (MediaRecorder)
+  const startRecording = async () => {
+    if (!micStream) {
+      const ok = await ensureMicPermission();
+      if (!ok) return;
+    }
+
     setRecording(true);
+    setAmplitudeLevel(0);
+    audioChunksRef.current = [];
+
+    const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm" });
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      await handleRecordedBlob(blob);
+    };
+
+    // Monitor amplitude
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(micStream!);
+    const analyser = audioContext.createAnalyser();
+    source.connect(analyser);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const monitor = () => {
+      analyser.getByteTimeDomainData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        const v = (dataArray[i] - 128) / 128.0;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / dataArray.length);
+      setAmplitudeLevel(rms);
+      if (recording) requestAnimationFrame(monitor);
+
+      // Detect silence
+      if (rms < silenceThreshold) {
+        if (!silenceTimerRef.current) {
+          silenceTimerRef.current = setTimeout(() => {
+            stopRecording();
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }, silenceDuration);
+        }
+      } else {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+    };
+    monitor();
+
+    recorder.start();
+
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
@@ -188,20 +230,16 @@ export default function Specialized2() {
     }, 1000);
   };
 
-  // 🛑 Dừng ghi âm
+  // 🛑 Stop recording
   const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
     setRecording(false);
-    setTimeout(() => {
-      if (recorderRef.current?.stopRecording) {
-        recorderRef.current.stopRecording();
-      }
-    }, 500);
   };
 
-  // 🎧 Khi dừng ghi
-  const onStop = async (recordedBlob: any) => {
-      console.log("onStop", recordedBlob);
-
+  // 🎧 Handle blob -> STT
+  const handleRecordedBlob = async (blob: Blob) => {
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
@@ -224,14 +262,14 @@ export default function Specialized2() {
           await runQuestionCycle(currentQ + 1);
         }
       };
-      reader.readAsDataURL(recordedBlob.blob);
+      reader.readAsDataURL(blob);
     } catch (err) {
-      console.error("❌ onStop error:", err);
+      console.error("❌ handleRecordedBlob error:", err);
       await runQuestionCycle(currentQ + 1);
     }
   };
 
-  // 🏁 Kết thúc phỏng vấn
+  // 🏁 Finish
   const finishInterview = async () => {
     clearInterval(timerRef.current);
     setRecording(false);
@@ -308,9 +346,7 @@ export default function Specialized2() {
     <Box p={4} minH="100vh" bg="white">
       <Flex align="center" borderBottom="1px solid black" pb={2}>
         <Image src="/logo.png" alt="Logo" boxSize="40px" mr={2} borderRadius="full" />
-        <Text fontSize="2xl" fontWeight="bold">
-          AI-Interview
-        </Text>
+        <Text fontSize="2xl" fontWeight="bold">AI-Interview</Text>
       </Flex>
 
       <HStack spacing={2} mt={2} mb={4}>
@@ -324,11 +360,7 @@ export default function Specialized2() {
           <Text>Specialized Practice</Text>
         </Button>
         <Icon as={MdOutlineKeyboardArrowRight} />
-        <Button
-          variant="ghost"
-          p={0}
-          onClick={() => router.push(`/components/specialized1?category=${category}`)}
-        >
+        <Button variant="ghost" p={0} onClick={() => router.push(`/components/specialized1?category=${category}`)}>
           <Icon as={FaMicrophone} boxSize={5} />
           <Text>{category}</Text>
         </Button>
@@ -339,28 +371,11 @@ export default function Specialized2() {
 
       <Flex>
         {/* LEFT */}
-        <Box
-          flex="2"
-          borderRight="1px solid black"
-          minH="70vh"
-          position="relative"
-          display="flex"
-          flexDirection="column"
-          justifyContent="center"
-          alignItems="center"
-        >
+        <Box flex="2" borderRight="1px solid black" minH="70vh" position="relative" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
           {isLoading && <Spinner size="xl" color="teal.400" mb={4} />}
 
           <VStack spacing={4} mb={6} w="full">
-            <Box
-              p={6}
-              border="1px solid"
-              borderColor="teal.400"
-              borderRadius="md"
-              bg="teal.50"
-              w="full"
-              maxW="800px"
-            >
+            <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px">
               <Text fontWeight="bold">
                 Question {currentQ + 1} / {questions.length}
               </Text>
@@ -372,34 +387,14 @@ export default function Specialized2() {
 
           {recording ? (
             <Box textAlign="center" mb={4} w="100%">
-              <Text color="red.500">Recording... ({countdown}s)</Text>
-              <ReactMic
-                ref={recorderRef}
-                key={currentQ}
-                record={recording}
-                onStop={onStop}
-                onData={(chunk: any) => {
-                  const amplitude = Math.abs(chunk?.amplitude ?? 0);
-                  if (amplitude < silenceThreshold) {
-                    if (!silenceTimerRef.current) {
-                      silenceTimerRef.current = setTimeout(() => {
-                        stopRecording();
-                        clearTimeout(silenceTimerRef.current);
-                        silenceTimerRef.current = null;
-                      }, silenceDuration);
-                    }
-                  } else {
-                    clearTimeout(silenceTimerRef.current);
-                    silenceTimerRef.current = null;
-                  }
-                }}
-                mimeType="audio/webm;codecs=opus"
-                strokeColor="#00b894"
-                backgroundColor="#f1f6f4"
-                visualSetting="frequencyBars"
-                width={600}
-                height={150}
-              />
+              <Text color="red.500" mb={2}>
+                Recording... ({countdown}s)
+              </Text>
+              <Box bg="#f7fafc" p={4} borderRadius="lg" boxShadow="md" width="100%" maxW="700px" display="flex" flexDirection="column" alignItems="center">
+                <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" position="relative">
+                  <Box h="full" bg="teal.400" width={`${Math.min(amplitudeLevel * 600, 100)}%`} transition="width 0.1s linear" />
+                </Box>
+              </Box>
             </Box>
           ) : (
             <Box mb={4}>
@@ -410,18 +405,7 @@ export default function Specialized2() {
           )}
 
           <Flex justify="center" position="absolute" bottom="16" left="0" right="0">
-            <Button
-              size="lg"
-              color="white"
-              bg={started ? "gray.400" : "teal.400"}
-              borderRadius="full"
-              px={10}
-              py={6}
-              fontSize="xl"
-              _hover={{ bg: started ? "gray.400" : "teal.500" }}
-              onClick={handleStart}
-              isDisabled={started}
-            >
+            <Button size="lg" color="white" bg={started ? "gray.400" : "teal.400"} borderRadius="full" px={10} py={6} fontSize="xl" _hover={{ bg: started ? "gray.400" : "teal.500" }} onClick={handleStart} isDisabled={started}>
               {started ? "Interview in progress..." : "Start"}
             </Button>
           </Flex>
@@ -431,23 +415,15 @@ export default function Specialized2() {
         <Box flex="1" pl={4} borderLeft="1px solid black">
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
-              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
-                Interview Results
-              </Tab>
-              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
-                AI Suggestions
-              </Tab>
+              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Interview Results</Tab>
+              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>AI Suggestions</Tab>
             </TabList>
 
             <TabPanels>
               <TabPanel>
                 {result ? (
                   <Box>
-                    <Text
-                      fontSize="2xl"
-                      fontWeight="bold"
-                      color={result.score >= 6 ? "teal.500" : "red.500"}
-                    >
+                    <Text fontSize="2xl" fontWeight="bold" color={result.score >= 6 ? "teal.500" : "red.500"}>
                       {result.score >= 6 ? "✅ PASS" : "❌ FAIL"}
                     </Text>
                     <Text mt={2}>Score: {result.score}</Text>
@@ -458,20 +434,14 @@ export default function Specialized2() {
                 )}
 
                 <Box mt={6}>
-                  <Text fontSize="sm" fontWeight="bold">
-                    Realtime history (last answers)
-                  </Text>
+                  <Text fontSize="sm" fontWeight="bold">Realtime history (last answers)</Text>
                   <VStack align="start" mt={2} spacing={2}>
                     {historyRealtime.length === 0 ? (
-                      <Text fontSize="sm" color="gray.500">
-                        No answers yet
-                      </Text>
+                      <Text fontSize="sm" color="gray.500">No answers yet</Text>
                     ) : (
                       historyRealtime.map((h) => (
                         <Box key={h.id} p={2} border="1px solid #eee" borderRadius="md" w="full">
-                          <Text fontSize="sm" fontWeight="semibold">
-                            {h.question}
-                          </Text>
+                          <Text fontSize="sm" fontWeight="semibold">{h.question}</Text>
                           <Text fontSize="sm">{h.answer}</Text>
                         </Box>
                       ))

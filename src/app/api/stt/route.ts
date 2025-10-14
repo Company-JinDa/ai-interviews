@@ -1,36 +1,30 @@
-import { SpeechClient } from "@google-cloud/speech";
-import fs from "fs";
-import path from "path";
+import speech from "@google-cloud/speech";
+import { NextResponse } from "next/server";
 
-const keyPath = path.join(process.cwd(), "google-key.json");
-const credentials = JSON.parse(fs.readFileSync(keyPath, "utf8"));
-
-const client = new SpeechClient({
-  credentials,
+const client = new speech.SpeechClient({
+  credentials: JSON.parse(process.env.GOOGLE_KEY || "{}"),
 });
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const audioBase64 = body.audio.split(",")[1];
+    const audioBytes = body.audio;
 
     const [response] = await client.recognize({
-      audio: { content: audioBase64 },
+      audio: { content: audioBytes },
       config: {
         encoding: "WEBM_OPUS",
-        languageCode: "vi-VN",
+        sampleRateHertz: 48000,
+        languageCode: "en-US",
       },
     });
 
-    const transcription = response.results
-      ?.map(r => r.alternatives?.[0].transcript)
-      .join(" ") || "";
+    const transcription =
+      response.results?.map((r) => r.alternatives?.[0]?.transcript).join("\n") || "";
 
-    return new Response(JSON.stringify({ text: transcription }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("❌ STT Error:", err);
-    return new Response(JSON.stringify({ error: "STT failed" }), { status: 500 });
+    return NextResponse.json({ transcription });
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
