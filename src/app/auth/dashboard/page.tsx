@@ -15,8 +15,10 @@ import {
   MenuItem,
   Select,
   Spinner,
+  useColorMode,
+  IconButton,
 } from "@chakra-ui/react"
-import { ChevronDownIcon } from "@chakra-ui/icons"
+import { ChevronDownIcon, MoonIcon, SunIcon } from "@chakra-ui/icons"
 import { FaHome, FaBicycle, FaRegFileAlt, FaUser, FaGlobe } from "react-icons/fa"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -49,6 +51,9 @@ export default function DashboardPage() {
   // 🔹 Lấy lang từ context
   const { lang, toggleLang } = useLang()
   const t = translations[lang]
+
+  // 🔹 Lấy color mode từ Chakra
+  const { colorMode, toggleColorMode } = useColorMode()
 
   useEffect(() => {
     setContributions(generateData(year))
@@ -186,14 +191,16 @@ export default function DashboardPage() {
       </Box>
 
       {/* Content */}
-      <Box flex="1" p={6} bg="gray.50" overflow="auto">
+      <Box flex="1" p={6} bg={colorMode === "light" ? "gray.50" : "gray.800"} overflow="auto">
         {/* Top Section */}
         <Flex justify="space-between" align="start" mb={8}>
           <Box maxW="lg">
             <Text fontSize="2xl" fontWeight="bold" mb={2}>
               {t.practiceTitle}
             </Text>
-            <Text color="gray.600">{t.practiceDesc}</Text>
+            <Text color={colorMode === "light" ? "gray.600" : "gray.300"}>
+              {t.practiceDesc}
+            </Text>
           </Box>
 
           <Box>
@@ -213,6 +220,14 @@ export default function DashboardPage() {
               <Button size="sm" leftIcon={<FaGlobe />} onClick={toggleLang}>
                 {lang === "en" ? "EN" : "VI"}
               </Button>
+
+              {/* 🌙 Nút dark/light mode */}
+              <IconButton
+                size="sm"
+                aria-label="Toggle Dark Mode"
+                icon={colorMode === "light" ? <MoonIcon /> : <SunIcon />}
+                onClick={toggleColorMode}
+              />
             </Flex>
 
             <Flex direction="row" gap={2}>
@@ -264,7 +279,7 @@ export default function DashboardPage() {
                 key={i}
                 w="200px"
                 h="250px"
-                bg="white"
+                bg={colorMode === "light" ? "white" : "gray.700"}
                 border="10px solid"
                 borderColor="gray.300"
                 borderRadius="md"
