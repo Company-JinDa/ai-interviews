@@ -47,19 +47,15 @@ export default function DashboardPage() {
   const [contributions, setContributions] = useState<Record<string, boolean>>({})
   const [role, setRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-
-  // 🔹 Lấy lang từ context
   const { lang, toggleLang } = useLang()
   const t = translations[lang]
 
-  // 🔹 Lấy color mode từ Chakra
   const { colorMode, toggleColorMode } = useColorMode()
 
   useEffect(() => {
     setContributions(generateData(year))
   }, [year])
 
-  // 🔹 Lấy role từ Firestore khi login
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -94,7 +90,6 @@ export default function DashboardPage() {
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
-      {/* Sidebar */}
       <Box
         w="250px"
         borderRight="1px solid"
@@ -110,7 +105,6 @@ export default function DashboardPage() {
           </Text>
         </HStack>
 
-        {/* Menu */}
         <VStack align="start" spacing={4} fontSize="lg" mb="auto">
           <Button
             as={Link}
@@ -216,7 +210,6 @@ export default function DashboardPage() {
                 <option value={2026}>2026</option>
               </Select>
 
-              {/* Nút chuyển ngôn ngữ */}
               <Button size="sm" leftIcon={<FaGlobe />} onClick={toggleLang}>
                 {lang === "en" ? "EN" : "VI"}
               </Button>
@@ -263,7 +256,6 @@ export default function DashboardPage() {
           </Box>
         </Flex>
 
-        {/* Features */}
         <Flex direction="column" align="center" mt={150}>
           <Flex align="center" mb={65} w="full" justify="center">
             <Divider flex="1" borderWidth="2px" />
