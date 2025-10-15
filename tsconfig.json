@@ -37,7 +37,7 @@
     "**/*.tsx",
     "next.config.js",
     ".next/types/**/*.ts"
-  ],
+, "docker-test/server.js", "docker-test/server.js"  ],
   "exclude": [
     ".next",
     "node_modules",
