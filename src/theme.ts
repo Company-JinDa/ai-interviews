@@ -4,18 +4,16 @@ const config: ThemeConfig = {
   initialColorMode: "light",
   useSystemColorMode: false,
 }
-
 const styles = {
   global: (props: any) => ({
     body: {
-      bg: props.colorMode === "dark" ? "#1A202C" : "#F5F7FB", // nền tổng thể sáng dịu hơn
+      bg: props.colorMode === "dark" ? "#1A202C" : "#F5F7FB", 
       color: props.colorMode === "dark" ? "#EDEDED" : "#1A202C",
       transition: "background-color 0.3s ease, color 0.3s ease",
     },
     "*": {
       borderColor: props.colorMode === "dark" ? "#2D3748" : "#E2E8F0",
     },
-
     ".chakra-card, .chakra-box, .chakra-input, .chakra-button, .chakra-tabs": {
       backgroundColor:
         props.colorMode === "dark" ? "#2D3748" : "#FFFFFF",
@@ -33,7 +31,6 @@ const styles = {
     },
   }),
 }
-
 const colors = {
   brand: {
     50: "#E8F5FF",
