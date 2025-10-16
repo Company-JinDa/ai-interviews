@@ -18,7 +18,6 @@ export async function POST(req: Request) {
         languageCode: "en-US",
       },
     });
-
     const transcription =
       response.results?.map((r) => r.alternatives?.[0]?.transcript).join("\n") || "";
 
