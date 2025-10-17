@@ -1,29 +1,41 @@
-import speech from "@google-cloud/speech";
-import { NextResponse } from "next/server";
+// app/api/stt/route.ts
+import { SpeechClient } from "@google-cloud/speech";
 
-const client = new speech.SpeechClient({
-  credentials: JSON.parse(process.env.GOOGLE_KEY || "{}"),
+const client = new SpeechClient({
+  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
 });
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   try {
-    const body = await req.json();
-    const audioBytes = body.audio;
+    const { audio }: { audio: string } = await req.json(); // base64 audio
 
-    const [response] = await client.recognize({
-      audio: { content: audioBytes },
+    const audioBuffer = Buffer.from(audio, "base64");
+
+    const request = {
       config: {
         encoding: "WEBM_OPUS",
         sampleRateHertz: 48000,
         languageCode: "en-US",
       },
-    });
-    const transcription =
-      response.results?.map((r) => r.alternatives?.[0]?.transcript).join("\n") || "";
+      audio: {
+        content: audioBuffer,
+      },
+    };
 
-    return NextResponse.json({ transcription });
-  } catch (err: any) {
-    console.error(err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    // avoid destructuring the possibly-void-overloaded return type by indexing the awaited result
+    const responseArr = (await client.recognize(request as any)) as any;
+    const response = responseArr?.[0];
+    const transcription =
+      response?.results?.[0]?.alternatives?.[0]?.transcript || "";
+
+    return new Response(JSON.stringify({ transcription }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error: any) {
+    console.error("STT API error:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+    });
   }
 }

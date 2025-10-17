@@ -69,8 +69,7 @@ export default function Specialized2() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  const silenceThreshold = 0.02;
-  const silenceDuration = 2000;
+  const silenceThreshold = 0.01; // Lowered threshold to better detect speech
 
   // ✅ Mic permission
   const ensureMicPermission = async (): Promise<boolean> => {
@@ -188,7 +187,12 @@ export default function Specialized2() {
         setAnalyser(null);
       }
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      await handleRecordedBlob(blob);
+      if (blob.size > 0) {
+        await handleRecordedBlob(blob);
+      } else {
+        setIsLoading(false);
+        await runQuestionCycle(currentQ + 1);
+      }
     };
 
     // Amplitude monitor setup
@@ -202,9 +206,6 @@ export default function Specialized2() {
 
     const dataArray = new Uint8Array(ana.frequencyBinCount);
 
-    let silenceTimeout: any = null;
-    let stopped = false;
-
     const monitor = () => {
       ana.getByteTimeDomainData(dataArray);
       let sum = 0;
@@ -214,21 +215,6 @@ export default function Specialized2() {
       }
       const rms = Math.sqrt(sum / dataArray.length);
       setAmplitudeLevel(rms);
-
-      // Detect silence
-      if (rms < silenceThreshold) {
-        if (!silenceTimeout) {
-          silenceTimeout = setTimeout(() => {
-            if (!stopped) {
-              stopped = true;
-              stopRecording();
-            }
-          }, silenceDuration);
-        }
-      } else {
-        clearTimeout(silenceTimeout);
-        silenceTimeout = null;
-      }
 
       if (recording && monitoring) requestAnimationFrame(monitor);
     };
@@ -242,10 +228,7 @@ export default function Specialized2() {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          if (!stopped) {
-            stopped = true;
-            stopRecording();
-          }
+          stopRecording();
           return 0;
         }
         return prev - 1;
@@ -260,9 +243,10 @@ export default function Specialized2() {
       mediaRecorderRef.current.stop();
     }
     setRecording(false);
+    clearInterval(timerRef.current);
   };
 
-  // 🎧 Handle blob -> STT (Sửa lại: chỉ chuyển câu khi STT xong hoặc timeout)
+  // 🎧 Handle blob -> STT
   const handleRecordedBlob = async (blob: Blob) => {
     setIsLoading(true);
     try {
@@ -280,7 +264,7 @@ export default function Specialized2() {
           sttTimeout = true;
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
-        }, 12000); // 12s timeout
+        }, 12000); // 12s timeout for STT
 
         try {
           const res = await fetch("/api/stt", {
@@ -292,6 +276,10 @@ export default function Specialized2() {
           clearTimeout(timeoutId);
           if (sttTimeout) return;
 
+          if (!res.ok) {
+            throw new Error("STT failed");
+          }
+
           const data = await res.json();
           if (data.transcription && data.transcription.trim()) {
             const newAnswers = [...answers, data.transcription];
@@ -301,6 +289,7 @@ export default function Specialized2() {
           await new Promise((r) => setTimeout(r, 700));
           await runQuestionCycle(currentQ + 1);
         } catch (err) {
+          console.error(err);
           clearTimeout(timeoutId);
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
@@ -308,6 +297,7 @@ export default function Specialized2() {
       };
       reader.readAsDataURL(blob);
     } catch (err) {
+      console.error(err);
       setIsLoading(false);
       await runQuestionCycle(currentQ + 1);
     }
@@ -415,26 +405,26 @@ export default function Specialized2() {
 
       <Flex>
         {/* LEFT */}
-        <Box flex="2" borderRight="1px solid black" minH="70vh" position="relative" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
+        <Box flex="3" borderRight="1px solid black" minH="70vh" position="relative" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
           {isLoading && <Spinner size="xl" color="teal.400" mb={4} />}
 
-          <VStack spacing={4} mb={6} w="full">
-            <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px">
-              <Text fontWeight="bold">
+          <VStack spacing={4} mb={6} w="full" align="center">
+            <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px" mx="auto">
+              <Text fontWeight="bold" textAlign="center">
                 Question {currentQ + 1} / {questions.length}
               </Text>
-              <Text mt={2} fontSize="lg">
+              <Text mt={2} fontSize="lg" textAlign="center">
                 {questions[currentQ] || "No question"}
               </Text>
             </Box>
           </VStack>
 
           {recording ? (
-            <Box textAlign="center" mb={4} w="100%">
+            <Box textAlign="center" mb={4} w="100%" maxW="800px" mx="auto">
               <Text color="red.500" mb={2}>
                 Recording... ({countdown}s)
               </Text>
-              <Box bg="#f7fafc" p={4} borderRadius="lg" boxShadow="md" width="100%" maxW="700px" display="flex" flexDirection="column" alignItems="center">
+              <Box bg="#f7fafc" p={4} borderRadius="lg" boxShadow="md" width="100%" display="flex" flexDirection="column" alignItems="center">
                 <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" position="relative">
                   <Box
                     h="full"
@@ -447,9 +437,12 @@ export default function Specialized2() {
                   {amplitudeLevel > silenceThreshold ? "Đang nói..." : "Đang im lặng..."}
                 </Text>
               </Box>
+              <Button mt={4} colorScheme="teal" onClick={stopRecording}>
+                Next
+              </Button>
             </Box>
           ) : (
-            <Box mb={4}>
+            <Box mb={4} textAlign="center">
               <Text color={hasMicPermission ? "gray.500" : "red.500"}>
                 {hasMicPermission ? "Ready to record" : "Microphone not allowed"}
               </Text>
@@ -464,7 +457,7 @@ export default function Specialized2() {
         </Box>
 
         {/* RIGHT */}
-        <Box flex="1" pl={4} borderLeft="1px solid black">
+        <Box flex="1" pl={4}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
               <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Interview Results</Tab>
