@@ -247,61 +247,63 @@ export default function Specialized2() {
   };
 
   // 🎧 Handle blob -> STT
-  const handleRecordedBlob = async (blob: Blob) => {
-    setIsLoading(true);
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        if (!reader.result) {
-          setIsLoading(false);
-          await runQuestionCycle(currentQ + 1);
-          return;
+ const handleRecordedBlob = async (blob: Blob) => {
+  setIsLoading(true);
+  try {
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      if (!reader.result) {
+        setIsLoading(false);
+        await runQuestionCycle(currentQ + 1);
+        return;
+      }
+      const base64Audio = (reader.result as string).split(",")[1];
+
+      let sttTimeout = false;
+      const timeoutId = setTimeout(async () => {
+        sttTimeout = true;
+        console.log("STT timeout triggered");
+        setIsLoading(false);
+        await runQuestionCycle(currentQ + 1);
+      }, 12000); // 12s timeout for STT
+
+      try {
+        const res = await fetch("/api/stt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audio: base64Audio }),
+        });
+
+        clearTimeout(timeoutId);
+        if (sttTimeout) return;
+
+        if (!res.ok) {
+          throw new Error(`STT failed with status ${res.status}`);
         }
-        const base64Audio = (reader.result as string).split(",")[1];
 
-        let sttTimeout = false;
-        const timeoutId = setTimeout(async () => {
-          sttTimeout = true;
-          setIsLoading(false);
-          await runQuestionCycle(currentQ + 1);
-        }, 12000); // 12s timeout for STT
-
-        try {
-          const res = await fetch("/api/stt", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ audio: base64Audio }),
-          });
-
-          clearTimeout(timeoutId);
-          if (sttTimeout) return;
-
-          if (!res.ok) {
-            throw new Error("STT failed");
-          }
-
-          const data = await res.json();
-          if (data.transcription && data.transcription.trim()) {
-            const newAnswers = [...answers, data.transcription];
-            setAnswers(newAnswers);
-          }
-          setIsLoading(false);
-          await new Promise((r) => setTimeout(r, 700));
-          await runQuestionCycle(currentQ + 1);
-        } catch (err) {
-          console.error(err);
-          clearTimeout(timeoutId);
-          setIsLoading(false);
-          await runQuestionCycle(currentQ + 1);
+        const data = await res.json();
+        console.log("STT Response:", data); // Debug log
+        if (data.transcription && data.transcription.trim()) {
+          const newAnswers = [...answers, data.transcription];
+          setAnswers(newAnswers);
         }
-      };
-      reader.readAsDataURL(blob);
-    } catch (err) {
-      console.error(err);
-      setIsLoading(false);
-      await runQuestionCycle(currentQ + 1);
-    }
-  };
+        setIsLoading(false);
+        await new Promise((r) => setTimeout(r, 700));
+        await runQuestionCycle(currentQ + 1);
+      } catch (err) {
+        console.error("STT Error:", err);
+        clearTimeout(timeoutId);
+        setIsLoading(false);
+        await runQuestionCycle(currentQ + 1);
+      }
+    };
+    reader.readAsDataURL(blob);
+  } catch (err) {
+    console.error("Blob Error:", err);
+    setIsLoading(false);
+    await runQuestionCycle(currentQ + 1);
+  }
+};
 
   // 🏁 Finish
   const finishInterview = async () => {

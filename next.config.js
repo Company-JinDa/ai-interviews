@@ -12,6 +12,10 @@ module.exports = {
     defaultLocale: 'en'
   }
 }
-
+module.exports = {
+  env: {
+    GOOGLE_APPLICATION_CREDENTIALS_JSON: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+  },
+};
 
 module.exports = nextConfig
