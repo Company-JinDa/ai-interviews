@@ -37,18 +37,19 @@ export default function Specialized2() {
   const searchParams = useSearchParams();
   const toast = useToast();
 
+  // Parse query params
   const category = searchParams.get("category") || "Information Technology";
   const level = searchParams.get("level") || "";
   const role = searchParams.get("role") || "";
   const questions = (() => {
     try {
-      return JSON.parse(decodeURIComponent(searchParams.get("questions") || "[]"));
+      return JSON.parse(searchParams.get("questions") || "[]");
     } catch {
       return [];
     }
   })();
 
-  // 🎯 State
+  // State
   const [currentQ, setCurrentQ] = useState<number>(0);
   const [recording, setRecording] = useState<boolean>(false);
   const [answers, setAnswers] = useState<string[]>([]);
@@ -60,7 +61,6 @@ export default function Specialized2() {
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [amplitudeLevel, setAmplitudeLevel] = useState(0);
-
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [monitoring, setMonitoring] = useState(false);
@@ -68,15 +68,15 @@ export default function Specialized2() {
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const silenceThreshold = 0.01;
+  const minRecordingDuration = 2000; // Minimum 2 seconds of recording
 
-  const silenceThreshold = 0.003; // Further lowered for sensitivity
-
-  // ✅ Mic permission
+  // Mic permission
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
+        audio: { echoCancellation: true, noiseSuppression: true },
       });
       setMicStream(stream);
       setHasMicPermission(true);
@@ -84,9 +84,8 @@ export default function Specialized2() {
     } catch {
       setHasMicPermission(false);
       toast({
-        title: "Microphone chưa được phép",
-        description:
-          "Hãy cho phép truy cập micro trong trình duyệt (icon micro trên thanh địa chỉ).",
+        title: "Microphone Access Denied",
+        description: "Please allow microphone access in your browser settings.",
         status: "error",
         position: "top",
       });
@@ -94,7 +93,7 @@ export default function Specialized2() {
     }
   };
 
-  // 🔊 Play question (TTS)
+  // Play question (TTS)
   const playQuestion = async (text: string): Promise<void> => {
     try {
       const res = await fetch("/api/tts", {
@@ -102,6 +101,7 @@ export default function Specialized2() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
       });
+      if (!res.ok) throw new Error("TTS request failed");
       const data = await res.json();
       const audio = new Audio("data:audio/mp3;base64," + data.audioContent);
       return new Promise<void>((resolve) => {
@@ -119,7 +119,7 @@ export default function Specialized2() {
     }
   };
 
-  // 🔔 Beep nhỏ
+  // Play beep
   const playBeep = () => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -138,29 +138,46 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // ▶️ Start
+  // Start interview
   const handleStart = async () => {
-    if (started) return;
+    if (started || questions.length === 0) return;
     const ok = await ensureMicPermission();
     if (!ok) return;
     setStarted(true);
     setAnswers([]);
+    setCurrentQ(0);
     await runQuestionCycle(0);
   };
 
-  // 🔁 Loop
+  // Question cycle
   const runQuestionCycle = async (index: number) => {
-    if (index >= questions.length) return await finishInterview();
+    if (index >= questions.length) {
+      await finishInterview();
+      return;
+    }
     setCurrentQ(index);
     setCountdown(60);
+    setIsLoading(false); // Reset loading state
 
-    await playQuestion(questions[index]);
-    playBeep();
-    await new Promise((r) => setTimeout(r, 500));
-    startRecording();
+    try {
+      await playQuestion(questions[index]);
+      playBeep();
+      await new Promise((r) => setTimeout(r, 500));
+      startRecording();
+    } catch (err) {
+      console.error("Error in question cycle:", err);
+      toast({
+        title: "Error",
+        description: "Failed to play question. Moving to next.",
+        status: "error",
+        position: "top",
+      });
+      setAnswers([...answers, ""]); // Store empty answer on failure
+      await runQuestionCycle(index + 1);
+    }
   };
 
-  // 🎙️ Start recording (MediaRecorder) + Amplitude monitor
+  // Start recording
   const startRecording = async () => {
     if (!micStream) {
       const ok = await ensureMicPermission();
@@ -171,11 +188,7 @@ export default function Specialized2() {
     setAmplitudeLevel(0);
     audioChunksRef.current = [];
 
-    // MediaRecorder setup with explicit sample rate and codec
-    const recorder = new MediaRecorder(micStream!, {
-      mimeType: "audio/webm; codecs=opus",
-      audioBitsPerSecond: 128000, // Higher bitrate for quality
-    });
+    const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm" });
     mediaRecorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
@@ -190,29 +203,25 @@ export default function Specialized2() {
         setAnalyser(null);
       }
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      if (blob.size > 0) {
+      if (blob.size > 1000) { // Ensure blob has meaningful data
         await handleRecordedBlob(blob);
       } else {
-        console.log("No audio data recorded");
+        setAnswers([...answers, ""]); // Store empty answer for silent recordings
         setIsLoading(false);
         await runQuestionCycle(currentQ + 1);
       }
     };
 
-    // Amplitude monitor setup
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
-      sampleRate: 48000 // Match STT sample rate
-    });
+    // Amplitude monitor
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     setAudioContext(ctx);
     const src = ctx.createMediaStreamSource(micStream!);
     const ana = ctx.createAnalyser();
-    ana.fftSize = 4096; // Increased FFT size for better resolution
     src.connect(ana);
     setAnalyser(ana);
     setMonitoring(true);
 
     const dataArray = new Uint8Array(ana.frequencyBinCount);
-
     const monitor = () => {
       ana.getByteTimeDomainData(dataArray);
       let sum = 0;
@@ -221,14 +230,12 @@ export default function Specialized2() {
         sum += v * v;
       }
       const rms = Math.sqrt(sum / dataArray.length);
-      console.log("RMS Level:", rms); // Debug RMS
       setAmplitudeLevel(rms);
-
       if (recording && monitoring) requestAnimationFrame(monitor);
     };
     monitor();
 
-    recorder.start(1000); // Record in 1-second chunks
+    recorder.start();
 
     // Countdown timer
     if (timerRef.current) clearInterval(timerRef.current);
@@ -244,7 +251,7 @@ export default function Specialized2() {
     }, 1000);
   };
 
-  // 🛑 Stop recording
+  // Stop recording
   const stopRecording = () => {
     setMonitoring(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -252,20 +259,16 @@ export default function Specialized2() {
     }
     setRecording(false);
     clearInterval(timerRef.current);
-    if (micStream) {
-      micStream.getTracks().forEach((track) => track.stop());
-      setMicStream(null);
-    }
   };
 
-  // 🎧 Handle blob -> STT
+  // Handle recorded audio
   const handleRecordedBlob = async (blob: Blob) => {
     setIsLoading(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
         if (!reader.result) {
-          console.log("No reader result");
+          setAnswers([...answers, ""]);
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
           return;
@@ -276,9 +279,10 @@ export default function Specialized2() {
         const timeoutId = setTimeout(async () => {
           sttTimeout = true;
           console.log("STT timeout triggered");
+          setAnswers([...answers, ""]);
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
-        }, 30000); // Increased timeout for longRunningRecognize
+        }, 20000); // Increased to 20s
 
         try {
           const res = await fetch("/api/stt", {
@@ -291,25 +295,20 @@ export default function Specialized2() {
           if (sttTimeout) return;
 
           if (!res.ok) {
-            console.error("STT failed with status", res.status);
             throw new Error(`STT failed with status ${res.status}`);
           }
 
           const data = await res.json();
-          console.log("STT Response:", data); // Debug log
-          let transcription = data.transcription || "";
-          if (transcription.trim()) {
-            const newAnswers = [...answers, transcription];
-            setAnswers(newAnswers);
-          } else {
-            console.log("Empty transcription, proceeding");
-          }
+          console.log("STT Response:", data);
+          const transcription = data.transcription?.trim() || "";
+          setAnswers([...answers, transcription]);
           setIsLoading(false);
           await new Promise((r) => setTimeout(r, 700));
           await runQuestionCycle(currentQ + 1);
         } catch (err) {
           console.error("STT Error:", err);
           clearTimeout(timeoutId);
+          setAnswers([...answers, ""]);
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
         }
@@ -317,12 +316,13 @@ export default function Specialized2() {
       reader.readAsDataURL(blob);
     } catch (err) {
       console.error("Blob Error:", err);
+      setAnswers([...answers, ""]);
       setIsLoading(false);
       await runQuestionCycle(currentQ + 1);
     }
   };
 
-  // 🏁 Finish
+  // Finish interview
   const finishInterview = async () => {
     clearInterval(timerRef.current);
     setRecording(false);
@@ -333,11 +333,9 @@ export default function Specialized2() {
       const res = await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, questions }),
+        body: JSON.stringify({ questions, answers }),
       });
-      if (!res.ok) {
-        throw new Error("Evaluate API failed");
-      }
+      if (!res.ok) throw new Error("Evaluation failed");
       const data = await res.json();
       setResult(data);
 
@@ -345,37 +343,39 @@ export default function Specialized2() {
         auth.currentUser?.uid ||
         `guest-${localStorage.getItem("guestUid") || `guest-${Date.now()}`}`;
       const userDocRef = doc(db, "users", uid);
-      const historyAnswerRef = collection(userDocRef, "historyAnswer");
+      const interviewsRef = collection(userDocRef, "interviews");
 
-      await addDoc(historyAnswerRef, {
+      await addDoc(interviewsRef, {
+        category,
+        level,
+        role,
         questions,
         answers,
         score: data?.score ?? null,
         feedback: data?.feedback ?? null,
-        suggestion: data?.suggestion ?? null,
         createdAt: serverTimestamp(),
       });
 
       toast({
-        title: "Interview finished!",
+        title: "Interview Completed",
         description: "Results saved successfully.",
         status: "success",
         duration: 2000,
       });
     } catch (err) {
-      console.error("Finish Interview Error:", err);
+      console.error("Finish Error:", err);
       toast({
-        title: "Error finishing interview",
-        description: "Please try again.",
+        title: "Error",
+        description: "Failed to save interview results.",
         status: "error",
-        duration: 2000,
+        position: "top",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🧠 Realtime history
+  // Realtime history (aligned with interviews collection)
   useEffect(() => {
     let unsub: (() => void) | undefined;
     (async () => {
@@ -388,8 +388,8 @@ export default function Specialized2() {
             return g;
           })());
       const userDocRef = doc(db, "users", uid);
-      const histCol = collection(userDocRef, "historyAnswer");
-      const q = firestoreQuery(histCol, orderBy("createdAt", "asc"));
+      const interviewsCol = collection(userDocRef, "interviews");
+      const q = firestoreQuery(interviewsCol, orderBy("createdAt", "desc"));
       unsub = onSnapshot(q, (snap) => {
         const arr: any[] = [];
         snap.forEach((d) => arr.push({ id: d.id, ...d.data() }));
@@ -399,6 +399,7 @@ export default function Specialized2() {
     return () => unsub && unsub();
   }, []);
 
+  // Initial mic permission check
   useEffect(() => {
     ensureMicPermission();
     return () => {
@@ -409,7 +410,7 @@ export default function Specialized2() {
     };
   }, []);
 
-  // ✅ UI
+  // UI
   return (
     <Box p={4} minH="100vh" bg="white">
       <Flex align="center" borderBottom="1px solid black" pb={2}>
@@ -463,15 +464,20 @@ export default function Specialized2() {
                   <Box
                     h="full"
                     bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
-                    width={`${Math.min(amplitudeLevel * 1000, 100)}%`}
+                    width={`${Math.min(amplitudeLevel * 600, 100)}%`}
                     transition="width 0.1s linear"
                   />
                 </Box>
                 <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
-                  {amplitudeLevel > silenceThreshold ? "Đang nói..." : "Đang im lặng..."}
+                  {amplitudeLevel > silenceThreshold ? "Speaking..." : "Silent..."}
                 </Text>
               </Box>
-              <Button mt={4} colorScheme="teal" onClick={stopRecording}>
+              <Button mt={4} colorScheme="gray" onClick={() => {
+                stopRecording();
+                setAnswers([...answers, ""]);
+                setIsLoading(false);
+                runQuestionCycle(currentQ + 1);
+              }}>
                 Next
               </Button>
             </Box>
@@ -484,7 +490,18 @@ export default function Specialized2() {
           )}
 
           <Flex justify="center" position="absolute" bottom="16" left="0" right="0">
-            <Button size="lg" color="white" bg={started ? "gray.400" : "teal.400"} borderRadius="full" px={10} py={6} fontSize="xl" _hover={{ bg: started ? "gray.400" : "teal.500" }} onClick={handleStart} isDisabled={started}>
+            <Button
+              size="lg"
+              color="white"
+              bg={started ? "gray.400" : "teal.400"}
+              borderRadius="full"
+              px={10}
+              py={6}
+              fontSize="xl"
+              _hover={{ bg: started ? "gray.400" : "teal.500" }}
+              onClick={handleStart}
+              isDisabled={started || questions.length === 0}
+            >
               {started ? "Interview in progress..." : "Start"}
             </Button>
           </Flex>
@@ -507,21 +524,34 @@ export default function Specialized2() {
                     </Text>
                     <Text mt={2}>Score: {result.score}</Text>
                     <Text mt={2}>{result.feedback}</Text>
+                    {result.perQuestionFeedback && (
+                      <VStack mt={4} align="start">
+                        <Text fontWeight="bold">Per-Question Feedback:</Text>
+                        {result.perQuestionFeedback.map((fb: any, i: number) => (
+                          <Box key={i} p={2} border="1px solid #eee" borderRadius="md" w="full">
+                            <Text fontSize="sm" fontWeight="semibold">Q{i + 1}: {questions[i]}</Text>
+                            <Text fontSize="sm">Answer: {answers[i] || "No answer"}</Text>
+                            <Text fontSize="sm">Feedback: {fb}</Text>
+                          </Box>
+                        ))}
+                      </VStack>
+                    )}
                   </Box>
                 ) : (
                   <Text>Interview result will appear here.</Text>
                 )}
 
                 <Box mt={6}>
-                  <Text fontSize="sm" fontWeight="bold">Realtime history (last answers)</Text>
+                  <Text fontSize="sm" fontWeight="bold">Recent Interviews</Text>
                   <VStack align="start" mt={2} spacing={2}>
                     {historyRealtime.length === 0 ? (
-                      <Text fontSize="sm" color="gray.500">No answers yet</Text>
+                      <Text fontSize="sm" color="gray.500">No interviews yet</Text>
                     ) : (
                       historyRealtime.map((h) => (
                         <Box key={h.id} p={2} border="1px solid #eee" borderRadius="md" w="full">
-                          <Text fontSize="sm" fontWeight="semibold">{h.questions[h.id]}</Text>
-                          <Text fontSize="sm">{h.answers[h.id]}</Text>
+                          <Text fontSize="sm" fontWeight="semibold">{h.category} - {h.role} ({h.level})</Text>
+                          <Text fontSize="sm">Score: {h.score || "N/A"}</Text>
+                          <Text fontSize="sm">Date: {h.createdAt?.toDate().toLocaleString()}</Text>
                         </Box>
                       ))
                     )}
@@ -530,11 +560,11 @@ export default function Specialized2() {
               </TabPanel>
 
               <TabPanel>
-                {result && result.score < 6 ? (
+                {result ? (
                   <Box>
-                    <Text mb={2}>AI Suggestion:</Text>
+                    <Text mb={2}>AI Suggestions:</Text>
                     <Text whiteSpace="pre-wrap">
-                      {result.suggestion || "Try to be more structured..."}
+                      {result.suggestion || "No specific suggestions. Keep practicing!"}
                     </Text>
                   </Box>
                 ) : (

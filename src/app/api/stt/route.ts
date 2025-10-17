@@ -1,23 +1,12 @@
 import { SpeechClient, protos } from "@google-cloud/speech";
 import { Storage } from "@google-cloud/storage";
+import fs from "fs";
 
-const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS
-  ? require(process.env.GOOGLE_APPLICATION_CREDENTIALS)
-  : {};
+const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-key.json';
+const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
 
-const client = new SpeechClient({
-  credentials: {
-    client_email: credentials.client_email,
-    private_key: credentials.private_key,
-  },
-});
-
-const storage = new Storage({
-  credentials: {
-    client_email: credentials.client_email,
-    private_key: credentials.private_key,
-  },
-});
+const client = new SpeechClient({ credentials });
+const storage = new Storage({ credentials });
 
 const bucketName = "ai-interview-audio-bucket"; // Ensure this bucket exists
 
