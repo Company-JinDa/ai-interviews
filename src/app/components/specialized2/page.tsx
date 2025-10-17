@@ -42,7 +42,7 @@ export default function Specialized2() {
   const role = searchParams.get("role") || "";
   const questions = (() => {
     try {
-      return JSON.parse(searchParams.get("questions") || "[]");
+      return JSON.parse(decodeURIComponent(searchParams.get("questions") || "[]"));
     } catch {
       return [];
     }
@@ -69,14 +69,14 @@ export default function Specialized2() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  const silenceThreshold = 0.01; // Lowered threshold to better detect speech
+  const silenceThreshold = 0.003; // Further lowered for sensitivity
 
   // ✅ Mic permission
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 48000 },
       });
       setMicStream(stream);
       setHasMicPermission(true);
@@ -171,8 +171,11 @@ export default function Specialized2() {
     setAmplitudeLevel(0);
     audioChunksRef.current = [];
 
-    // MediaRecorder setup
-    const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm" });
+    // MediaRecorder setup with explicit sample rate and codec
+    const recorder = new MediaRecorder(micStream!, {
+      mimeType: "audio/webm; codecs=opus",
+      audioBitsPerSecond: 128000, // Higher bitrate for quality
+    });
     mediaRecorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
@@ -190,16 +193,20 @@ export default function Specialized2() {
       if (blob.size > 0) {
         await handleRecordedBlob(blob);
       } else {
+        console.log("No audio data recorded");
         setIsLoading(false);
         await runQuestionCycle(currentQ + 1);
       }
     };
 
     // Amplitude monitor setup
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
+      sampleRate: 48000 // Match STT sample rate
+    });
     setAudioContext(ctx);
     const src = ctx.createMediaStreamSource(micStream!);
     const ana = ctx.createAnalyser();
+    ana.fftSize = 4096; // Increased FFT size for better resolution
     src.connect(ana);
     setAnalyser(ana);
     setMonitoring(true);
@@ -214,13 +221,14 @@ export default function Specialized2() {
         sum += v * v;
       }
       const rms = Math.sqrt(sum / dataArray.length);
+      console.log("RMS Level:", rms); // Debug RMS
       setAmplitudeLevel(rms);
 
       if (recording && monitoring) requestAnimationFrame(monitor);
     };
     monitor();
 
-    recorder.start();
+    recorder.start(1000); // Record in 1-second chunks
 
     // Countdown timer
     if (timerRef.current) clearInterval(timerRef.current);
@@ -244,66 +252,75 @@ export default function Specialized2() {
     }
     setRecording(false);
     clearInterval(timerRef.current);
+    if (micStream) {
+      micStream.getTracks().forEach((track) => track.stop());
+      setMicStream(null);
+    }
   };
 
   // 🎧 Handle blob -> STT
- const handleRecordedBlob = async (blob: Blob) => {
-  setIsLoading(true);
-  try {
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      if (!reader.result) {
-        setIsLoading(false);
-        await runQuestionCycle(currentQ + 1);
-        return;
-      }
-      const base64Audio = (reader.result as string).split(",")[1];
-
-      let sttTimeout = false;
-      const timeoutId = setTimeout(async () => {
-        sttTimeout = true;
-        console.log("STT timeout triggered");
-        setIsLoading(false);
-        await runQuestionCycle(currentQ + 1);
-      }, 12000); // 12s timeout for STT
-
-      try {
-        const res = await fetch("/api/stt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio: base64Audio }),
-        });
-
-        clearTimeout(timeoutId);
-        if (sttTimeout) return;
-
-        if (!res.ok) {
-          throw new Error(`STT failed with status ${res.status}`);
+  const handleRecordedBlob = async (blob: Blob) => {
+    setIsLoading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        if (!reader.result) {
+          console.log("No reader result");
+          setIsLoading(false);
+          await runQuestionCycle(currentQ + 1);
+          return;
         }
+        const base64Audio = (reader.result as string).split(",")[1];
 
-        const data = await res.json();
-        console.log("STT Response:", data); // Debug log
-        if (data.transcription && data.transcription.trim()) {
-          const newAnswers = [...answers, data.transcription];
-          setAnswers(newAnswers);
+        let sttTimeout = false;
+        const timeoutId = setTimeout(async () => {
+          sttTimeout = true;
+          console.log("STT timeout triggered");
+          setIsLoading(false);
+          await runQuestionCycle(currentQ + 1);
+        }, 30000); // Increased timeout for longRunningRecognize
+
+        try {
+          const res = await fetch("/api/stt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ audio: base64Audio }),
+          });
+
+          clearTimeout(timeoutId);
+          if (sttTimeout) return;
+
+          if (!res.ok) {
+            console.error("STT failed with status", res.status);
+            throw new Error(`STT failed with status ${res.status}`);
+          }
+
+          const data = await res.json();
+          console.log("STT Response:", data); // Debug log
+          let transcription = data.transcription || "";
+          if (transcription.trim()) {
+            const newAnswers = [...answers, transcription];
+            setAnswers(newAnswers);
+          } else {
+            console.log("Empty transcription, proceeding");
+          }
+          setIsLoading(false);
+          await new Promise((r) => setTimeout(r, 700));
+          await runQuestionCycle(currentQ + 1);
+        } catch (err) {
+          console.error("STT Error:", err);
+          clearTimeout(timeoutId);
+          setIsLoading(false);
+          await runQuestionCycle(currentQ + 1);
         }
-        setIsLoading(false);
-        await new Promise((r) => setTimeout(r, 700));
-        await runQuestionCycle(currentQ + 1);
-      } catch (err) {
-        console.error("STT Error:", err);
-        clearTimeout(timeoutId);
-        setIsLoading(false);
-        await runQuestionCycle(currentQ + 1);
-      }
-    };
-    reader.readAsDataURL(blob);
-  } catch (err) {
-    console.error("Blob Error:", err);
-    setIsLoading(false);
-    await runQuestionCycle(currentQ + 1);
-  }
-};
+      };
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      console.error("Blob Error:", err);
+      setIsLoading(false);
+      await runQuestionCycle(currentQ + 1);
+    }
+  };
 
   // 🏁 Finish
   const finishInterview = async () => {
@@ -316,8 +333,11 @@ export default function Specialized2() {
       const res = await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers, questions }),
       });
+      if (!res.ok) {
+        throw new Error("Evaluate API failed");
+      }
       const data = await res.json();
       setResult(data);
 
@@ -325,13 +345,14 @@ export default function Specialized2() {
         auth.currentUser?.uid ||
         `guest-${localStorage.getItem("guestUid") || `guest-${Date.now()}`}`;
       const userDocRef = doc(db, "users", uid);
-      const interviewsRef = collection(userDocRef, "interviews");
+      const historyAnswerRef = collection(userDocRef, "historyAnswer");
 
-      await addDoc(interviewsRef, {
+      await addDoc(historyAnswerRef, {
         questions,
         answers,
         score: data?.score ?? null,
         feedback: data?.feedback ?? null,
+        suggestion: data?.suggestion ?? null,
         createdAt: serverTimestamp(),
       });
 
@@ -342,7 +363,13 @@ export default function Specialized2() {
         duration: 2000,
       });
     } catch (err) {
-      console.error(err);
+      console.error("Finish Interview Error:", err);
+      toast({
+        title: "Error finishing interview",
+        description: "Please try again.",
+        status: "error",
+        duration: 2000,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -361,7 +388,7 @@ export default function Specialized2() {
             return g;
           })());
       const userDocRef = doc(db, "users", uid);
-      const histCol = collection(userDocRef, "history");
+      const histCol = collection(userDocRef, "historyAnswer");
       const q = firestoreQuery(histCol, orderBy("createdAt", "asc"));
       unsub = onSnapshot(q, (snap) => {
         const arr: any[] = [];
@@ -374,7 +401,12 @@ export default function Specialized2() {
 
   useEffect(() => {
     ensureMicPermission();
-    return () => clearInterval(timerRef.current);
+    return () => {
+      clearInterval(timerRef.current);
+      if (micStream) {
+        micStream.getTracks().forEach((track) => track.stop());
+      }
+    };
   }, []);
 
   // ✅ UI
@@ -431,7 +463,7 @@ export default function Specialized2() {
                   <Box
                     h="full"
                     bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
-                    width={`${Math.min(amplitudeLevel * 600, 100)}%`}
+                    width={`${Math.min(amplitudeLevel * 1000, 100)}%`}
                     transition="width 0.1s linear"
                   />
                 </Box>
@@ -488,8 +520,8 @@ export default function Specialized2() {
                     ) : (
                       historyRealtime.map((h) => (
                         <Box key={h.id} p={2} border="1px solid #eee" borderRadius="md" w="full">
-                          <Text fontSize="sm" fontWeight="semibold">{h.question}</Text>
-                          <Text fontSize="sm">{h.answer}</Text>
+                          <Text fontSize="sm" fontWeight="semibold">{h.questions[h.id]}</Text>
+                          <Text fontSize="sm">{h.answers[h.id]}</Text>
                         </Box>
                       ))
                     )}

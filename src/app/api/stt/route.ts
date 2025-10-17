@@ -1,21 +1,30 @@
-// app/api/stt/route.ts
 import { SpeechClient, protos } from "@google-cloud/speech";
 import { Storage } from "@google-cloud/storage";
 
-// Load credentials from environment variable, fallback to empty object if invalid
-const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
-  ? JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON)
+const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  ? require(process.env.GOOGLE_APPLICATION_CREDENTIALS)
   : {};
 
-const client = new SpeechClient({ credentials });
-const storage = new Storage({ credentials });
+const client = new SpeechClient({
+  credentials: {
+    client_email: credentials.client_email,
+    private_key: credentials.private_key,
+  },
+});
+
+const storage = new Storage({
+  credentials: {
+    client_email: credentials.client_email,
+    private_key: credentials.private_key,
+  },
+});
 
 const bucketName = "ai-interview-audio-bucket"; // Ensure this bucket exists
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    if (!credentials.client_email) {
-      throw new Error("Credentials are invalid or missing client_email");
+    if (!credentials.client_email || !credentials.private_key) {
+      throw new Error("Invalid or missing Google Cloud credentials");
     }
 
     const { audio }: { audio: string } = await req.json(); // base64 audio
@@ -32,7 +41,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const request: protos.google.cloud.speech.v1.ILongRunningRecognizeRequest = {
       config: {
-        encoding: "WEBM_OPUS" as const,
+        encoding: protos.google.cloud.speech.v1.RecognitionConfig.AudioEncoding.WEBM_OPUS,
         sampleRateHertz: 48000,
         languageCode: "en-US",
       },
@@ -46,9 +55,7 @@ export async function POST(req: Request): Promise<Response> {
 
     const transcription =
       response.results
-        ?.map((result: protos.google.cloud.speech.v1.ISpeechRecognitionResult) =>
-          result.alternatives?.[0]?.transcript
-        )
+        ?.map((result) => result.alternatives?.[0]?.transcript)
         .join("\n") || "";
 
     // Clean up the file
