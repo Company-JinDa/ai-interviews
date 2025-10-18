@@ -540,7 +540,6 @@ export default function Specialized2() {
                 ) : (
                   <Text>Interview result will appear here.</Text>
                 )}
-
                 <Box mt={6}>
                   <Text fontSize="sm" fontWeight="bold">Recent Interviews</Text>
                   <VStack align="start" mt={2} spacing={2}>
