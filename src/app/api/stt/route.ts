@@ -47,7 +47,6 @@ export async function POST(req: Request): Promise<Response> {
         ?.map((result) => result.alternatives?.[0]?.transcript)
         .join("\n") || "";
 
-    // Clean up the file
     await file.delete().catch((err) => console.error("Failed to delete GCS file:", err));
 
     return new Response(JSON.stringify({ transcription }), {
