@@ -38,7 +38,6 @@ export async function POST(req: Request): Promise<Response> {
         uri,
       },
     };
-
     const [operation] = await client.longRunningRecognize(request);
     const [response] = await operation.promise();
 
@@ -46,9 +45,7 @@ export async function POST(req: Request): Promise<Response> {
       response.results
         ?.map((result) => result.alternatives?.[0]?.transcript)
         .join("\n") || "";
-
     await file.delete().catch((err) => console.error("Failed to delete GCS file:", err));
-
     return new Response(JSON.stringify({ transcription }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
