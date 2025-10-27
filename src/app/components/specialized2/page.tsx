@@ -577,15 +577,12 @@ export default function Specialized2() {
             </Button>
           </Flex>
         </Box>
-
-        {/* RIGHT */}
         <Box flex="1" pl={4}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
               <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Interview Results</Tab>
               <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>AI Suggestions</Tab>
             </TabList>
-
             <TabPanels>
               <TabPanel>
                 {result ? (
@@ -628,7 +625,6 @@ export default function Specialized2() {
                   </VStack>
                 </Box>
               </TabPanel>
-
               <TabPanel>
                 {result ? (
                   <Box>
