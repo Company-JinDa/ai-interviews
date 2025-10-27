@@ -30,6 +30,7 @@ import {
   onSnapshot,
   orderBy,
   query as firestoreQuery,
+  updateDoc,
 } from "firebase/firestore";
 
 export default function Specialized2() {
@@ -65,11 +66,19 @@ export default function Specialized2() {
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [monitoring, setMonitoring] = useState(false);
 
+  // Firestore interview doc ref (so we can update answers as we go)
+  const interviewDocRef = useRef<any>(null);
+
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const silenceThreshold = 0.01;
-  const minRecordingDuration = 2000; // Minimum 2 seconds of recording
+  const minRecordingDuration = 1200; // ms
+  const silenceTimeout = 1400; // ms of continuous silence to auto-stop
+
+  // Used to detect silence
+  const lastSpokenAtRef = useRef<number>(0);
+  const recordingStartedAtRef = useRef<number>(0);
 
   // Mic permission
   const ensureMicPermission = async (): Promise<boolean> => {
@@ -119,7 +128,7 @@ export default function Specialized2() {
     }
   };
 
-  // Play beep
+  // Beep before recording
   const playBeep = () => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -138,14 +147,49 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // Start interview
+  // Start interview: create firestore document and begin cycle
   const handleStart = async () => {
     if (started || questions.length === 0) return;
     const ok = await ensureMicPermission();
     if (!ok) return;
+
     setStarted(true);
     setAnswers([]);
     setCurrentQ(0);
+    setResult(null);
+
+    // create interview doc in firestore now so we can update as we go
+    try {
+      const uid =
+        auth.currentUser?.uid ||
+        (localStorage.getItem("guestUid") ||
+          (() => {
+            const g = `guest-${Date.now()}`;
+            localStorage.setItem("guestUid", g);
+            return g;
+          })());
+      const userDocRef = doc(db, "users", uid);
+      const interviewsRef = collection(userDocRef, "interviews");
+
+      const interviewDoc = await addDoc(interviewsRef, {
+        category,
+        level,
+        role,
+        questions,
+        answers: [],
+        score: null,
+        feedback: null,
+        createdAt: serverTimestamp(),
+        startedAt: serverTimestamp(),
+        finished: false,
+      });
+
+      interviewDocRef.current = interviewDoc;
+    } catch (err) {
+      console.error("Failed to create interview doc:", err);
+      // proceed anyway (still works locally in memory)
+    }
+
     await runQuestionCycle(0);
   };
 
@@ -157,13 +201,13 @@ export default function Specialized2() {
     }
     setCurrentQ(index);
     setCountdown(60);
-    setIsLoading(false); // Reset loading state
+    setIsLoading(false);
 
     try {
       await playQuestion(questions[index]);
       playBeep();
-      await new Promise((r) => setTimeout(r, 500));
-      startRecording();
+      await new Promise((r) => setTimeout(r, 300));
+      await startRecording();
     } catch (err) {
       console.error("Error in question cycle:", err);
       toast({
@@ -172,7 +216,9 @@ export default function Specialized2() {
         status: "error",
         position: "top",
       });
-      setAnswers([...answers, ""]); // Store empty answer on failure
+      setAnswers((prev) => [...prev, ""]);
+      // update firestore with empty answer
+      await persistAnswersToFirestore([...answers, ""]);
       await runQuestionCycle(index + 1);
     }
   };
@@ -187,6 +233,8 @@ export default function Specialized2() {
     setRecording(true);
     setAmplitudeLevel(0);
     audioChunksRef.current = [];
+    lastSpokenAtRef.current = Date.now();
+    recordingStartedAtRef.current = Date.now();
 
     const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm" });
     mediaRecorderRef.current = recorder;
@@ -203,20 +251,23 @@ export default function Specialized2() {
         setAnalyser(null);
       }
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      if (blob.size > 1000) { // Ensure blob has meaningful data
+      if (blob.size > 1000) {
         await handleRecordedBlob(blob);
       } else {
-        setAnswers([...answers, ""]); // Store empty answer for silent recordings
+        // silent or too small
+        setAnswers((prev) => [...prev, ""]);
+        await persistAnswersToFirestore([...answers, ""]);
         setIsLoading(false);
         await runQuestionCycle(currentQ + 1);
       }
     };
 
-    // Amplitude monitor
+    // Amplitude monitor + silence detection
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     setAudioContext(ctx);
     const src = ctx.createMediaStreamSource(micStream!);
     const ana = ctx.createAnalyser();
+    ana.fftSize = 2048;
     src.connect(ana);
     setAnalyser(ana);
     setMonitoring(true);
@@ -231,13 +282,26 @@ export default function Specialized2() {
       }
       const rms = Math.sqrt(sum / dataArray.length);
       setAmplitudeLevel(rms);
+
+      const now = Date.now();
+      if (rms > silenceThreshold) {
+        lastSpokenAtRef.current = now;
+      } else {
+        const sinceLastSpoke = now - lastSpokenAtRef.current;
+        const sinceStart = now - recordingStartedAtRef.current;
+        if (sinceLastSpoke > silenceTimeout && sinceStart > minRecordingDuration) {
+          // auto-stop if quiet for a while and min duration passed
+          stopRecording();
+          return;
+        }
+      }
+
       if (recording && monitoring) requestAnimationFrame(monitor);
     };
     monitor();
 
     recorder.start();
-
-    // Countdown timer
+    // Countdown
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((prev) => {
@@ -251,7 +315,6 @@ export default function Specialized2() {
     }, 1000);
   };
 
-  // Stop recording
   const stopRecording = () => {
     setMonitoring(false);
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -261,29 +324,21 @@ export default function Specialized2() {
     clearInterval(timerRef.current);
   };
 
-  // Handle recorded audio
   const handleRecordedBlob = async (blob: Blob) => {
     setIsLoading(true);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
         if (!reader.result) {
-          setAnswers([...answers, ""]);
+          setAnswers((prev) => [...prev, ""]);
+          await persistAnswersToFirestore([...answers, ""]);
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
           return;
         }
         const base64Audio = (reader.result as string).split(",")[1];
 
-        let sttTimeout = false;
-        const timeoutId = setTimeout(async () => {
-          sttTimeout = true;
-          console.log("STT timeout triggered");
-          setAnswers([...answers, ""]);
-          setIsLoading(false);
-          await runQuestionCycle(currentQ + 1);
-        }, 20000); // Increased to 20s
-
+        // Send to STT
         try {
           const res = await fetch("/api/stt", {
             method: "POST",
@@ -291,24 +346,24 @@ export default function Specialized2() {
             body: JSON.stringify({ audio: base64Audio }),
           });
 
-          clearTimeout(timeoutId);
-          if (sttTimeout) return;
-
-          if (!res.ok) {
-            throw new Error(`STT failed with status ${res.status}`);
-          }
-
+          if (!res.ok) throw new Error(`STT failed with ${res.status}`);
           const data = await res.json();
-          console.log("STT Response:", data);
           const transcription = data.transcription?.trim() || "";
-          setAnswers([...answers, transcription]);
+
+          const nextAnswers = [...answers, transcription];
+          setAnswers(nextAnswers);
+
+          // Persist to Firestore after each question
+          await persistAnswersToFirestore(nextAnswers);
+
           setIsLoading(false);
-          await new Promise((r) => setTimeout(r, 700));
+          // little delay for UX
+          await new Promise((r) => setTimeout(r, 500));
           await runQuestionCycle(currentQ + 1);
         } catch (err) {
           console.error("STT Error:", err);
-          clearTimeout(timeoutId);
-          setAnswers([...answers, ""]);
+          setAnswers((prev) => [...prev, ""]);
+          await persistAnswersToFirestore([...answers, ""]);
           setIsLoading(false);
           await runQuestionCycle(currentQ + 1);
         }
@@ -316,13 +371,27 @@ export default function Specialized2() {
       reader.readAsDataURL(blob);
     } catch (err) {
       console.error("Blob Error:", err);
-      setAnswers([...answers, ""]);
+      setAnswers((prev) => [...prev, ""]);
+      await persistAnswersToFirestore([...answers, ""]);
       setIsLoading(false);
       await runQuestionCycle(currentQ + 1);
     }
   };
 
-  // Finish interview
+  // Persist answers array to firestore doc if exists
+  const persistAnswersToFirestore = async (answersArr: string[]) => {
+    try {
+      if (!interviewDocRef.current) return;
+      await updateDoc(interviewDocRef.current, {
+        answers: answersArr,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      // it's okay if this fails; we still keep in-memory answers
+      console.warn("Failed to update interview doc:", err);
+    }
+  };
+
   const finishInterview = async () => {
     clearInterval(timerRef.current);
     setRecording(false);
@@ -330,6 +399,7 @@ export default function Specialized2() {
     setIsLoading(true);
 
     try {
+      // Evaluate using backend
       const res = await fetch("/api/evaluate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -339,22 +409,21 @@ export default function Specialized2() {
       const data = await res.json();
       setResult(data);
 
-      const uid =
-        auth.currentUser?.uid ||
-        `guest-${localStorage.getItem("guestUid") || `guest-${Date.now()}`}`;
-      const userDocRef = doc(db, "users", uid);
-      const interviewsRef = collection(userDocRef, "interviews");
-
-      await addDoc(interviewsRef, {
-        category,
-        level,
-        role,
-        questions,
-        answers,
-        score: data?.score ?? null,
-        feedback: data?.feedback ?? null,
-        createdAt: serverTimestamp(),
-      });
+      // Update interview doc with final results
+      try {
+        if (interviewDocRef.current) {
+          await updateDoc(interviewDocRef.current, {
+            score: data?.score ?? null,
+            feedback: data?.feedback ?? null,
+            perQuestionFeedback: data?.perQuestionFeedback ?? null,
+            finished: true,
+            finishedAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to finalize interview doc:", err);
+      }
 
       toast({
         title: "Interview Completed",
@@ -399,15 +468,14 @@ export default function Specialized2() {
     return () => unsub && unsub();
   }, []);
 
-  // Initial mic permission check
+  // Initial mic permission
   useEffect(() => {
     ensureMicPermission();
     return () => {
       clearInterval(timerRef.current);
-      if (micStream) {
-        micStream.getTracks().forEach((track) => track.stop());
-      }
+      if (micStream) micStream.getTracks().forEach((t) => t.stop());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // UI
@@ -460,7 +528,7 @@ export default function Specialized2() {
                 Recording... ({countdown}s)
               </Text>
               <Box bg="#f7fafc" p={4} borderRadius="lg" boxShadow="md" width="100%" display="flex" flexDirection="column" alignItems="center">
-                <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" position="relative">
+                <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden">
                   <Box
                     h="full"
                     bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
@@ -473,8 +541,11 @@ export default function Specialized2() {
                 </Text>
               </Box>
               <Button mt={4} colorScheme="gray" onClick={() => {
+                // skip current question (recording stops & store empty answer)
                 stopRecording();
-                setAnswers([...answers, ""]);
+                const nextAnswers = [...answers, ""];
+                setAnswers(nextAnswers);
+                persistAnswersToFirestore(nextAnswers);
                 setIsLoading(false);
                 runQuestionCycle(currentQ + 1);
               }}>
@@ -484,7 +555,7 @@ export default function Specialized2() {
           ) : (
             <Box mb={4} textAlign="center">
               <Text color={hasMicPermission ? "gray.500" : "red.500"}>
-                {hasMicPermission ? "Ready to record" : "Microphone not allowed"}
+                {hasMicPermission ? "Ready to record (auto after TTS)" : "Microphone not allowed"}
               </Text>
             </Box>
           )}
@@ -550,7 +621,7 @@ export default function Specialized2() {
                         <Box key={h.id} p={2} border="1px solid #eee" borderRadius="md" w="full">
                           <Text fontSize="sm" fontWeight="semibold">{h.category} - {h.role} ({h.level})</Text>
                           <Text fontSize="sm">Score: {h.score || "N/A"}</Text>
-                          <Text fontSize="sm">Date: {h.createdAt?.toDate().toLocaleString()}</Text>
+                          <Text fontSize="sm">Date: {h.createdAt?.toDate?.()?.toLocaleString ? h.createdAt.toDate().toLocaleString() : (h.createdAt || "N/A")}</Text>
                         </Box>
                       ))
                     )}
