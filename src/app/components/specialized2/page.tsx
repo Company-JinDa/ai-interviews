@@ -583,6 +583,7 @@ export default function Specialized2() {
               <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Interview Results</Tab>
               <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>AI Suggestions</Tab>
             </TabList>
+
             <TabPanels>
               <TabPanel>
                 {result ? (
