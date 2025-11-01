@@ -1,59 +1,34 @@
-import { SpeechClient, protos } from "@google-cloud/speech";
-import { Storage } from "@google-cloud/storage";
+import { SpeechClient } from "@google-cloud/speech";
 import fs from "fs";
 
-const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-key.json';
-const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-
+const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-key.json', 'utf8'));
 const client = new SpeechClient({ credentials });
-const storage = new Storage({ credentials });
 
-const bucketName = "ai-interview-audio-bucket"; // Ensure this bucket exists
-
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: Request) {
   try {
-    if (!credentials.client_email || !credentials.private_key) {
-      throw new Error("Invalid or missing Google Cloud credentials");
-    }
-
-    const { audio }: { audio: string } = await req.json(); // base64 audio
-
+    const { audio } = await req.json();
     const audioBuffer = Buffer.from(audio, "base64");
 
-    // Upload to GCS
-    const fileName = `audio_${Date.now()}.webm`;
-    const bucket = storage.bucket(bucketName);
-    const file = bucket.file(fileName);
-    await file.save(audioBuffer, { contentType: "audio/webm" });
+    if (audioBuffer.length > 1 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: "Audio too long" }), { status: 400 });
+    }
 
-    const uri = `gs://${bucketName}/${fileName}`;
-
-    const request: protos.google.cloud.speech.v1.ILongRunningRecognizeRequest = {
+    const [response] = await client.recognize({
       config: {
-        encoding: protos.google.cloud.speech.v1.RecognitionConfig.AudioEncoding.WEBM_OPUS,
+        encoding: "WEBM_OPUS",
         sampleRateHertz: 48000,
         languageCode: "en-US",
       },
-      audio: {
-        uri,
-      },
-    };
-    const [operation] = await client.longRunningRecognize(request);
-    const [response] = await operation.promise();
+      audio: { content: audioBuffer },
+    });
 
-    const transcription =
-      response.results
-        ?.map((result) => result.alternatives?.[0]?.transcript)
-        .join("\n") || "";
-    await file.delete().catch((err) => console.error("Failed to delete GCS file:", err));
-    return new Response(JSON.stringify({ transcription }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    const transcription = response.results
+      ?.map((r) => r.alternatives?.[0]?.transcript)
+      .join(" ") || "";
+
+    return new Response(JSON.stringify({ transcription }), { status: 200 });
   } catch (error: any) {
-    console.error("STT API error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-    });
+    console.error("STT error:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
