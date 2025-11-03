@@ -291,8 +291,13 @@ export default function Specialized2() {
     }
     setIsLoading(false);
     await new Promise((r) => setTimeout(r, 500));
-    setCurrentQ((prev) => prev + 1); // CẬP NHẬT currentQ TRƯỚC
-    await runQuestionCycle(currentQ + 1); // CHUYỂN CÂU MỚI
+    const nextQ = currentQ + 1;
+    setCurrentQ(nextQ);
+    if (nextQ < questions.length) {
+      await runQuestionCycle(nextQ);
+    } else {
+      await finishInterview();
+    }
   };
 
   const finishInterview = async () => {
