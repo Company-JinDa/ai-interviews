@@ -466,6 +466,7 @@ export default function Specialized2() {
                           <Text fontSize="sm">Date: {h.createdAt?.toDate?.()?.toLocaleString?.() || "N/A"}</Text>
                         </Box>
                       ))
+                      
                     )}
                   </VStack>
                 </Box>
