@@ -155,10 +155,10 @@ export default function Specialized2() {
   };
 
   const runQuestionCycle = async (index: number) => {
-    if (index >= questions.length) {
-      await finishInterview();
-      return;
-    }
+  if (index >= questions.length || currentQ >= questions.length) {
+    await finishInterview();
+    return;
+  }
 
     setCurrentQ(index);
     setCountdown(60);
@@ -318,22 +318,33 @@ export default function Specialized2() {
     reader.readAsDataURL(blob);
   };
 
-  const saveAndNext = async (text: string) => {
-    const nextAnswers = [...answers, text];
-    setAnswers(nextAnswers);
-    if (interviewDocRef.current) {
-      await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
-    }
-    setIsLoading(false);
-    await new Promise((r) => setTimeout(r, 500));
-    const nextQ = currentQ + 1;
+// 1. Thay hàm saveAndNext
+const saveAndNext = async (text: string) => {
+  if (currentQ >= questions.length) {
+    await finishInterview();
+    return;
+  }
+
+  const nextAnswers = [...answers, text];
+  setAnswers(nextAnswers);
+
+  if (interviewDocRef.current) {
+    await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
+  }
+
+  setIsLoading(false);
+  await new Promise((r) => setTimeout(r, 500));
+
+  const nextQ = currentQ + 1;
+
+  if (nextQ >= questions.length) {
+    setCurrentQ(questions.length);
+    await finishInterview();
+  } else {
     setCurrentQ(nextQ);
-    if (nextQ < questions.length) {
-      await runQuestionCycle(nextQ);
-    } else {
-      await finishInterview();
-    }
-  };
+    await runQuestionCycle(nextQ);
+  }
+};
 
   const finishInterview = async () => {
     setRecording(false);
@@ -411,8 +422,12 @@ export default function Specialized2() {
 
           <VStack spacing={4} mb={6} w="full" align="center">
             <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px" mx="auto">
-              <Text fontWeight="bold" textAlign="center">Question {currentQ + 1} / {questions.length}</Text>
-              <Text mt={2} fontSize="lg" textAlign="center">{questions[currentQ] || "No question"}</Text>
+              <Text fontWeight="bold" textAlign="center">
+                Question {Math.min(currentQ + 1, questions.length)} / {questions.length}
+              </Text>
+              <Text mt={2} fontSize="lg" textAlign="center">
+                {questions[currentQ] || (currentQ >= questions.length ? "Evaluating your answers..." : "No question")}
+              </Text>
             </Box>
           </VStack>
 
