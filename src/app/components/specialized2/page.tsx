@@ -68,9 +68,11 @@ export default function Specialized2() {
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const silenceThreshold = 0.02; // TĂNG LÊN ĐỂ NHẬN ÂM THANH DỄ HƠN
-  const minRecordingDuration = 1000;
-  const silenceTimeout = 1200;
+  
+  // ĐÃ FIX: Giảm ngưỡng âm thanh + thời gian im lặng
+  const silenceThreshold = 0.008;     // NHẠY HƠN (trước: 0.02)
+  const minRecordingDuration = 500;   // 0.5s đủ để bắt đầu
+  const silenceTimeout = 800;         // 0.8s im lặng → next (trước: 1200ms)
   const lastSpokenAtRef = useRef<number>(0);
   const recordingStartedAtRef = useRef<number>(0);
 
@@ -196,28 +198,28 @@ export default function Specialized2() {
       setAnalyser(null);
 
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      if (blob.size > 1000) {
+      if (blob.size > 100) {
         await handleRecordedBlob(blob);
       } else {
-        await saveAndNext(""); // im lặng → bỏ qua
+        await saveAndNext("");
       }
     };
 
-    // TẠO AUDIO CONTEXT RIÊNG ĐỂ ĐO ÂM THANH
+    // Tạo Audio Context để đo âm thanh
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const source = ctx.createMediaStreamSource(micStream!);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
+    const analyserNode = ctx.createAnalyser();
+    analyserNode.fftSize = 2048;
+    source.connect(analyserNode);
     setAudioContext(ctx);
-    setAnalyser(analyser);
+    setAnalyser(analyserNode);
     setMonitoring(true);
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
 
     const monitor = () => {
       if (!monitoring || !recording) return;
-      analyser.getByteTimeDomainData(dataArray);
+      analyserNode.getByteTimeDomainData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
         const v = (dataArray[i] - 128) / 128;
@@ -229,7 +231,10 @@ export default function Specialized2() {
       const now = Date.now();
       if (rms > silenceThreshold) {
         lastSpokenAtRef.current = now;
-      } else if (now - lastSpokenAtRef.current > silenceTimeout && now - recordingStartedAtRef.current > minRecordingDuration) {
+      } else if (
+        now - lastSpokenAtRef.current > silenceTimeout &&
+        now - recordingStartedAtRef.current > minRecordingDuration
+      ) {
         stopRecording();
         return;
       }
@@ -240,13 +245,23 @@ export default function Specialized2() {
 
     recorder.start();
 
-    // Countdown
+    // Countdown + FORCE STOP khi hết 60s
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(timerRef.current);
-          stopRecording();
+          if (mediaRecorderRef.current?.state === "recording") {
+            mediaRecorderRef.current.stop();
+            // Fallback nếu onstop không fire
+            setTimeout(() => {
+              if (recording) {
+                console.warn("Force next after 60s timeout");
+                stopRecording();
+                saveAndNext("");
+              }
+            }, 1000);
+          }
           return 0;
         }
         return c - 1;
@@ -255,11 +270,29 @@ export default function Specialized2() {
   };
 
   const stopRecording = async () => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-    }
+    if (!recording) return;
+
     setRecording(false);
     clearInterval(timerRef.current);
+
+    if (mediaRecorderRef.current?.state === "recording") {
+      try {
+        mediaRecorderRef.current.requestData();
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.error("Error stopping recorder:", err);
+      }
+    }
+
+    // Fallback: nếu onstop không chạy → tự động next sau 1.5s
+    setTimeout(() => {
+      if (audioChunksRef.current.length > 0) {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        handleRecordedBlob(blob);
+      } else {
+        saveAndNext("");
+      }
+    }, 1500);
   };
 
   const handleRecordedBlob = async (blob: Blob) => {
@@ -278,6 +311,8 @@ export default function Specialized2() {
       } catch (err) {
         console.error("STT error:", err);
         await saveAndNext("");
+      } finally {
+        setIsLoading(false);
       }
     };
     reader.readAsDataURL(blob);
@@ -466,7 +501,6 @@ export default function Specialized2() {
                           <Text fontSize="sm">Date: {h.createdAt?.toDate?.()?.toLocaleString?.() || "N/A"}</Text>
                         </Box>
                       ))
-                      
                     )}
                   </VStack>
                 </Box>
