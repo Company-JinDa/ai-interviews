@@ -31,6 +31,7 @@ import {
   orderBy,
   query as firestoreQuery,
   updateDoc,
+  where,
 } from "firebase/firestore";
 
 export default function Specialized2() {
@@ -193,11 +194,11 @@ export default function Specialized2() {
 
     const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
     localStorage.setItem("guestUid", uid);
-    const userDocRef = doc(db, "users", uid);
-    const interviewsRef = collection(userDocRef, "interviews");
+    const interviewsRef = collection(db, "interviews");
 
     try {
       const docRef = await addDoc(interviewsRef, {
+        userId: uid,
         category, level, role, questions, answers: [], score: null, feedback: null, suggestion: null,
         createdAt: serverTimestamp(), startedAt: serverTimestamp(), finished: false,
       });
@@ -468,7 +469,7 @@ export default function Specialized2() {
   useEffect(() => {
     const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
     localStorage.setItem("guestUid", uid);
-    const q = firestoreQuery(collection(doc(db, "users", uid), "interviews"), orderBy("createdAt", "desc"));
+    const q = firestoreQuery(collection(db, "interviews"), where("userId", "==", uid), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (s) => setHistoryRealtime(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => unsub();
   }, []);
