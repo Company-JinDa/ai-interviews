@@ -1,45 +1,35 @@
 // app/api/stt/route.ts
 import { SpeechClient } from "@google-cloud/speech";
+import fs from "fs";
 
-const client = new SpeechClient({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS || "./google-key.json",
-});
-
-export const dynamic = "force-dynamic";
+const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-key.json', 'utf8'));
+const client = new SpeechClient({ credentials });
 
 export async function POST(req: Request) {
   try {
     const { audio } = await req.json();
-    if (!audio) {
-      return new Response(JSON.stringify({ transcription: "" }), { status: 200 });
-    }
-
     const audioBuffer = Buffer.from(audio, "base64");
 
-    // Dùng LongRunningRecognize để hỗ trợ audio dài bất kỳ
-    const [operation] = await client.longRunningRecognize({
+    if (audioBuffer.length > 1 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: "Audio too long" }), { status: 400 });
+    }
+
+    const [response] = await client.recognize({
       config: {
         encoding: "WEBM_OPUS",
         sampleRateHertz: 48000,
         languageCode: "en-US",
-        enableAutomaticPunctuation: true,
       },
       audio: { content: audioBuffer },
     });
 
-    const [response] = await operation.promise();
-
     const transcription = response.results
-      ?.map((result) => result.alternatives?.[0]?.transcript || "")
-      .join(" ")
-      .trim();
+      ?.map((r) => r.alternatives?.[0]?.transcript)
+      .join(" ") || "";
 
-    return new Response(JSON.stringify({ transcription }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ transcription }), { status: 200 });
   } catch (error: any) {
-    console.error("STT Fallback Error:", error.message);
-    return new Response(JSON.stringify({ transcription: "" }), { status: 200 });
+    console.error("STT error:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }

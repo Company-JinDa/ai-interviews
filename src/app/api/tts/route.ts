@@ -1,34 +1,27 @@
+// app/api/tts/route.ts
 import textToSpeech from "@google-cloud/text-to-speech";
+import fs from "fs";
 
-const client = new textToSpeech.TextToSpeechClient({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS || "./google-key.json",
-});
-
-export const dynamic = "force-dynamic";
+const credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS || './google-key.json', 'utf8'));
+const client = new textToSpeech.TextToSpeechClient({ credentials });
 
 export async function POST(req: Request) {
   try {
     const { text } = await req.json();
-    if (!text || text.trim() === "") {
-      return new Response(JSON.stringify({ audioContent: "" }), { status: 200 });
-    }
 
     const [response] = await client.synthesizeSpeech({
       input: { text },
-      voice: { languageCode: "en-US", name: "en-US-Standard-C" },
-      audioConfig: { audioEncoding: "MP3", speakingRate: 1.0 },
+      voice: { languageCode: "en-US", ssmlGender: "NEUTRAL" },
+      audioConfig: { audioEncoding: "MP3" },
     });
 
-    // response.audioContent may be a Buffer/Uint8Array — convert to base64 safely
-    const audioBuffer = response.audioContent as any;
-    const audioContent = audioBuffer ? Buffer.from(audioBuffer).toString("base64") : "";
+    const audioContent = response.audioContent
+      ? response.audioContent.toString("base64")
+      : "";
 
-    return new Response(JSON.stringify({ audioContent }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ audioContent }), { status: 200 });
   } catch (error: any) {
-    console.error("TTS Error:", error?.message || error);
-    return new Response(JSON.stringify({ audioContent: "" }), { status: 200 });
+    console.error("TTS API error:", error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }

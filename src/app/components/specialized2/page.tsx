@@ -69,7 +69,7 @@ export default function Specialized2() {
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>("");
   const interimTranscriptRef = useRef<string>("");
-  const [interimText, setInterimText] = useState<string>("");
+  const [liveText, setLiveText] = useState<string>("");
 
   const interviewDocRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
@@ -78,9 +78,10 @@ export default function Specialized2() {
   
   const silenceThreshold = 0.008;
   const minRecordingDuration = 500;
-  const silenceTimeout = 800;
+  const silenceTimeout = 10000; // 10s không nói → next
   const lastSpokenAtRef = useRef<number>(0);
   const recordingStartedAtRef = useRef<number>(0);
+  const hasPlayedQuestion = useRef<boolean>(false); // Đảm bảo chỉ play 1 lần
 
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
@@ -152,7 +153,7 @@ export default function Specialized2() {
     recognition.lang = "en-US";
 
     recognition.onresult = (event: any) => {
-      let final = "";
+      let final = finalTranscriptRef.current;
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
@@ -164,8 +165,8 @@ export default function Specialized2() {
       }
       finalTranscriptRef.current = final;
       interimTranscriptRef.current = interim;
-      setInterimText(interim);
-      if (final) lastSpokenAtRef.current = Date.now();
+      setLiveText(final + interim); // Hiển thị live text kết hợp final + interim
+      if (final || interim) lastSpokenAtRef.current = Date.now();
     };
 
     recognition.onerror = (event: any) => {
@@ -175,7 +176,9 @@ export default function Specialized2() {
 
     recognition.onend = () => {
       if (recording) {
-        recognition.start(); // auto restart
+        try {
+          recognition.start();
+        } catch {}
       }
     };
 
@@ -190,7 +193,8 @@ export default function Specialized2() {
     setStarted(true); setAnswers([]); setCurrentQ(0); setResult(null);
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
-    setInterimText("");
+    setLiveText("");
+    hasPlayedQuestion.current = false;
 
     const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
     localStorage.setItem("guestUid", uid);
@@ -219,10 +223,14 @@ export default function Specialized2() {
     setIsLoading(false);
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
-    setInterimText("");
+    setLiveText("");
+    hasPlayedQuestion.current = false;
 
     try {
-      await playQuestion(questions[index]);
+      if (!hasPlayedQuestion.current) {
+        await playQuestion(questions[index]);
+        hasPlayedQuestion.current = true;
+      }
       playBeep();
       await new Promise((r) => setTimeout(r, 300));
       await startRecording();
@@ -249,13 +257,12 @@ export default function Specialized2() {
         recognitionRef.current.start();
         console.log("Web Speech API started");
 
-        // Auto stop khi im lặng
+        // Auto stop khi im lặng 10s
         const checkSilence = () => {
           if (!recording) return;
           const now = Date.now();
           if (now - lastSpokenAtRef.current > silenceTimeout &&
-              now - recordingStartedAtRef.current > minRecordingDuration &&
-              finalTranscriptRef.current.trim()) {
+              now - recordingStartedAtRef.current > minRecordingDuration) {
             stopRecording();
             return;
           }
@@ -291,12 +298,18 @@ export default function Specialized2() {
     recorder.onstop = async () => {
       setMonitoring(false);
       audioContext?.close();
+      setAudioContext(null);
+      setAnalyser(null);
+
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      if (blob.size > 100) await handleRecordedBlob(blob);
-      else await saveAndNext("");
+      if (blob.size > 100) {
+        await handleRecordedBlob(blob);
+      } else {
+        await saveAndNext("");
+      }
     };
 
-    // Monitor amplitude như cũ
+    // Tạo Audio Context để đo âm thanh
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const source = ctx.createMediaStreamSource(micStream!);
     const analyserNode = ctx.createAnalyser();
@@ -307,6 +320,7 @@ export default function Specialized2() {
     setMonitoring(true);
 
     const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
     const monitor = () => {
       if (!monitoring || !recording) return;
       analyserNode.getByteTimeDomainData(dataArray);
@@ -319,27 +333,31 @@ export default function Specialized2() {
       setAmplitudeLevel(rms);
 
       const now = Date.now();
-      if (rms > silenceThreshold) lastSpokenAtRef.current = now;
-      else if (
+      if (rms > silenceThreshold) {
+        lastSpokenAtRef.current = now;
+      } else if (
         now - lastSpokenAtRef.current > silenceTimeout &&
         now - recordingStartedAtRef.current > minRecordingDuration
       ) {
         stopRecording();
         return;
       }
+
       requestAnimationFrame(monitor);
     };
     monitor();
 
     recorder.start();
 
-    // Countdown
+    // Countdown + FORCE STOP khi hết 60s
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(timerRef.current);
-          if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+          if (mediaRecorderRef.current?.state === "recording") {
+            mediaRecorderRef.current.stop();
+          }
           return 0;
         }
         return c - 1;
@@ -349,10 +367,10 @@ export default function Specialized2() {
 
   const stopRecording = async () => {
     if (!recording) return;
+
     setRecording(false);
     clearInterval(timerRef.current);
 
-    // Dừng Web Speech
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
     }
@@ -367,18 +385,23 @@ export default function Specialized2() {
 
     // Fallback: dừng MediaRecorder
     if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
+      try {
+        mediaRecorderRef.current.requestData();
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.error("Error stopping recorder:", err);
+      }
     }
 
-    // Fallback xử lý sau 1s
-    setTimeout(async () => {
+    // Fallback: nếu onstop không chạy → tự động next sau 1.5s
+    setTimeout(() => {
       if (audioChunksRef.current.length > 0) {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        await handleRecordedBlob(blob);
+        handleRecordedBlob(blob);
       } else {
-        await saveAndNext("");
+        saveAndNext("");
       }
-    }, 1000);
+    }, 1500);
   };
 
   const handleRecordedBlob = async (blob: Blob) => {
@@ -392,10 +415,11 @@ export default function Specialized2() {
           body: JSON.stringify({ audio: base64 }),
           headers: { "Content-Type": "application/json" },
         });
-        const { transcription } = res.ok ? await res.json() : { transcription: "" };
+        if (!res.ok) throw new Error("STT failed");
+        const { transcription } = await res.json();
         await saveAndNext(transcription.trim());
       } catch (err) {
-        console.error("STT fallback error:", err);
+        console.error("STT error:", err);
         await saveAndNext("");
       } finally {
         setIsLoading(false);
@@ -421,6 +445,7 @@ export default function Specialized2() {
     await new Promise((r) => setTimeout(r, 500));
 
     const nextQ = currentQ + 1;
+
     if (nextQ >= questions.length) {
       setCurrentQ(questions.length);
       await finishInterview();
@@ -440,7 +465,10 @@ export default function Specialized2() {
         body: JSON.stringify({ questions, answers }),
         headers: { "Content-Type": "application/json" },
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Evaluation failed");
+      }
       const data = await res.json();
       setResult(data);
       if (interviewDocRef.current) {
@@ -485,7 +513,6 @@ export default function Specialized2() {
 
   return (
     <Box p={4} minH="100vh" bg="white">
-      {/* Header & Breadcrumb - giữ nguyên */}
       <Flex align="center" borderBottom="1px solid black" pb={2}>
         <Image src="/logo.png" alt="Logo" boxSize="40px" mr={2} borderRadius="full" />
         <Text fontSize="2xl" fontWeight="bold">AI-Interview</Text>
@@ -517,20 +544,13 @@ export default function Specialized2() {
             </Box>
           </VStack>
 
-          {/* REALTIME TEXT DISPLAY */}
           {recording && (
             <Box textAlign="center" w="100%" maxW="800px" mx="auto" p={4} bg="gray.50" borderRadius="lg">
               <Text color="red.500" fontWeight="bold" mb={2}>Recording... ({countdown}s)</Text>
               
-              {interimText && (
-                <Text fontSize="lg" color="gray.600" fontStyle="italic">
-                  {interimText}
-                </Text>
-              )}
-              
-              {finalTranscriptRef.current && (
-                <Text mt={3} fontSize="xl" color="teal.600" fontWeight="bold">
-                  ✓ {finalTranscriptRef.current}
+              {liveText && (
+                <Text fontSize="lg" color="teal.500">
+                  ✓ {liveText}
                 </Text>
               )}
 
@@ -573,7 +593,6 @@ export default function Specialized2() {
           </Flex>
         </Box>
 
-        {/* Results Panel - giữ nguyên */}
         <Box flex="1" pl={4}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
@@ -587,7 +606,7 @@ export default function Specialized2() {
                     <Text fontSize="2xl" fontWeight="bold" color={result.score >= 6 ? "teal.500" : "red.500"}>
                       {result.score >= 6 ? "PASS" : "FAIL"}
                     </Text>
-                    <Text mt={2}>Score: {result.score}/10</Text>
+                    <Text mt={2}>Score: {result.score}</Text>
                     <Text mt={2}>{result.feedback}</Text>
                     {result.perQuestionFeedback && (
                       <VStack mt={4} align="start">
