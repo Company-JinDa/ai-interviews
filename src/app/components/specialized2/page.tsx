@@ -64,15 +64,20 @@ export default function Specialized2() {
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [monitoring, setMonitoring] = useState(false);
 
+  // NEW: Web Speech API
+  const recognitionRef = useRef<any>(null);
+  const finalTranscriptRef = useRef<string>("");
+  const interimTranscriptRef = useRef<string>("");
+  const [interimText, setInterimText] = useState<string>("");
+
   const interviewDocRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   
-  // ĐÃ FIX: Giảm ngưỡng âm thanh + thời gian im lặng
-  const silenceThreshold = 0.008;     // NHẠY HƠN (trước: 0.02)
-  const minRecordingDuration = 500;   // 0.5s đủ để bắt đầu
-  const silenceTimeout = 800;         // 0.8s im lặng → next (trước: 1200ms)
+  const silenceThreshold = 0.008;
+  const minRecordingDuration = 500;
+  const silenceTimeout = 800;
   const lastSpokenAtRef = useRef<number>(0);
   const recordingStartedAtRef = useRef<number>(0);
 
@@ -131,12 +136,60 @@ export default function Specialized2() {
     } catch {}
   };
 
+  // ==================== WEB SPEECH API SETUP ====================
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      console.log("Web Speech API not supported");
+      return;
+    }
+
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event: any) => {
+      let final = "";
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript + " ";
+        } else {
+          interim += transcript;
+        }
+      }
+      finalTranscriptRef.current = final;
+      interimTranscriptRef.current = interim;
+      setInterimText(interim);
+      if (final) lastSpokenAtRef.current = Date.now();
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Web Speech error:", event.error);
+      if (event.error === "not-allowed") setHasMicPermission(false);
+    };
+
+    recognition.onend = () => {
+      if (recording) {
+        recognition.start(); // auto restart
+      }
+    };
+
+    recognitionRef.current = recognition;
+  }, []);
+
   const handleStart = async () => {
     if (started || questions.length === 0) return;
     const ok = await ensureMicPermission();
     if (!ok) return;
 
     setStarted(true); setAnswers([]); setCurrentQ(0); setResult(null);
+    finalTranscriptRef.current = "";
+    interimTranscriptRef.current = "";
+    setInterimText("");
 
     const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
     localStorage.setItem("guestUid", uid);
@@ -155,14 +208,17 @@ export default function Specialized2() {
   };
 
   const runQuestionCycle = async (index: number) => {
-  if (index >= questions.length || currentQ >= questions.length) {
-    await finishInterview();
-    return;
-  }
+    if (index >= questions.length) {
+      await finishInterview();
+      return;
+    }
 
     setCurrentQ(index);
     setCountdown(60);
     setIsLoading(false);
+    finalTranscriptRef.current = "";
+    interimTranscriptRef.current = "";
+    setInterimText("");
 
     try {
       await playQuestion(questions[index]);
@@ -186,6 +242,46 @@ export default function Specialized2() {
     lastSpokenAtRef.current = Date.now();
     recordingStartedAtRef.current = Date.now();
 
+    // ƯU TIÊN WEB SPEECH API (REALTIME, FREE)
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        console.log("Web Speech API started");
+
+        // Auto stop khi im lặng
+        const checkSilence = () => {
+          if (!recording) return;
+          const now = Date.now();
+          if (now - lastSpokenAtRef.current > silenceTimeout &&
+              now - recordingStartedAtRef.current > minRecordingDuration &&
+              finalTranscriptRef.current.trim()) {
+            stopRecording();
+            return;
+          }
+          requestAnimationFrame(checkSilence);
+        };
+        checkSilence();
+
+        // Countdown 60s
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+          setCountdown((c) => {
+            if (c <= 1) {
+              clearInterval(timerRef.current);
+              stopRecording();
+              return 0;
+            }
+            return c - 1;
+          });
+        }, 1000);
+
+        return; // Dùng Web Speech → thoát luôn
+      } catch (err) {
+        console.log("Web Speech failed, fallback to MediaRecorder");
+      }
+    }
+
+    // FALLBACK: MediaRecorder + Google Cloud STT
     const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm;codecs=opus" });
     mediaRecorderRef.current = recorder;
 
@@ -194,18 +290,12 @@ export default function Specialized2() {
     recorder.onstop = async () => {
       setMonitoring(false);
       audioContext?.close();
-      setAudioContext(null);
-      setAnalyser(null);
-
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      if (blob.size > 100) {
-        await handleRecordedBlob(blob);
-      } else {
-        await saveAndNext("");
-      }
+      if (blob.size > 100) await handleRecordedBlob(blob);
+      else await saveAndNext("");
     };
 
-    // Tạo Audio Context để đo âm thanh
+    // Monitor amplitude như cũ
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const source = ctx.createMediaStreamSource(micStream!);
     const analyserNode = ctx.createAnalyser();
@@ -216,7 +306,6 @@ export default function Specialized2() {
     setMonitoring(true);
 
     const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-
     const monitor = () => {
       if (!monitoring || !recording) return;
       analyserNode.getByteTimeDomainData(dataArray);
@@ -229,39 +318,27 @@ export default function Specialized2() {
       setAmplitudeLevel(rms);
 
       const now = Date.now();
-      if (rms > silenceThreshold) {
-        lastSpokenAtRef.current = now;
-      } else if (
+      if (rms > silenceThreshold) lastSpokenAtRef.current = now;
+      else if (
         now - lastSpokenAtRef.current > silenceTimeout &&
         now - recordingStartedAtRef.current > minRecordingDuration
       ) {
         stopRecording();
         return;
       }
-
       requestAnimationFrame(monitor);
     };
     monitor();
 
     recorder.start();
 
-    // Countdown + FORCE STOP khi hết 60s
+    // Countdown
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(timerRef.current);
-          if (mediaRecorderRef.current?.state === "recording") {
-            mediaRecorderRef.current.stop();
-            // Fallback nếu onstop không fire
-            setTimeout(() => {
-              if (recording) {
-                console.warn("Force next after 60s timeout");
-                stopRecording();
-                saveAndNext("");
-              }
-            }, 1000);
-          }
+          if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
           return 0;
         }
         return c - 1;
@@ -271,28 +348,36 @@ export default function Specialized2() {
 
   const stopRecording = async () => {
     if (!recording) return;
-
     setRecording(false);
     clearInterval(timerRef.current);
 
-    if (mediaRecorderRef.current?.state === "recording") {
-      try {
-        mediaRecorderRef.current.requestData();
-        mediaRecorderRef.current.stop();
-      } catch (err) {
-        console.error("Error stopping recorder:", err);
-      }
+    // Dừng Web Speech
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
     }
 
-    // Fallback: nếu onstop không chạy → tự động next sau 1.5s
-    setTimeout(() => {
+    // Nếu có kết quả từ Web Speech → dùng luôn
+    if (finalTranscriptRef.current.trim()) {
+      const text = finalTranscriptRef.current.trim();
+      console.log("Web Speech final:", text);
+      await saveAndNext(text);
+      return;
+    }
+
+    // Fallback: dừng MediaRecorder
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+
+    // Fallback xử lý sau 1s
+    setTimeout(async () => {
       if (audioChunksRef.current.length > 0) {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        handleRecordedBlob(blob);
+        await handleRecordedBlob(blob);
       } else {
-        saveAndNext("");
+        await saveAndNext("");
       }
-    }, 1500);
+    }, 1000);
   };
 
   const handleRecordedBlob = async (blob: Blob) => {
@@ -309,7 +394,7 @@ export default function Specialized2() {
         const { transcription } = res.ok ? await res.json() : { transcription: "" };
         await saveAndNext(transcription.trim());
       } catch (err) {
-        console.error("STT error:", err);
+        console.error("STT fallback error:", err);
         await saveAndNext("");
       } finally {
         setIsLoading(false);
@@ -318,33 +403,31 @@ export default function Specialized2() {
     reader.readAsDataURL(blob);
   };
 
-// 1. Thay hàm saveAndNext
-const saveAndNext = async (text: string) => {
-  if (currentQ >= questions.length) {
-    await finishInterview();
-    return;
-  }
+  const saveAndNext = async (text: string) => {
+    if (currentQ >= questions.length) {
+      await finishInterview();
+      return;
+    }
 
-  const nextAnswers = [...answers, text];
-  setAnswers(nextAnswers);
+    const nextAnswers = [...answers, text];
+    setAnswers(nextAnswers);
 
-  if (interviewDocRef.current) {
-    await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
-  }
+    if (interviewDocRef.current) {
+      await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
+    }
 
-  setIsLoading(false);
-  await new Promise((r) => setTimeout(r, 500));
+    setIsLoading(false);
+    await new Promise((r) => setTimeout(r, 500));
 
-  const nextQ = currentQ + 1;
-
-  if (nextQ >= questions.length) {
-    setCurrentQ(questions.length);
-    await finishInterview();
-  } else {
-    setCurrentQ(nextQ);
-    await runQuestionCycle(nextQ);
-  }
-};
+    const nextQ = currentQ + 1;
+    if (nextQ >= questions.length) {
+      setCurrentQ(questions.length);
+      await finishInterview();
+    } else {
+      setCurrentQ(nextQ);
+      await runQuestionCycle(nextQ);
+    }
+  };
 
   const finishInterview = async () => {
     setRecording(false);
@@ -395,11 +478,13 @@ const saveAndNext = async (text: string) => {
     return () => {
       clearInterval(timerRef.current);
       micStream?.getTracks().forEach(t => t.stop());
+      if (recognitionRef.current) recognitionRef.current.stop();
     };
   }, []);
 
   return (
     <Box p={4} minH="100vh" bg="white">
+      {/* Header & Breadcrumb - giữ nguyên */}
       <Flex align="center" borderBottom="1px solid black" pb={2}>
         <Image src="/logo.png" alt="Logo" boxSize="40px" mr={2} borderRadius="full" />
         <Text fontSize="2xl" fontWeight="bold">AI-Interview</Text>
@@ -431,27 +516,42 @@ const saveAndNext = async (text: string) => {
             </Box>
           </VStack>
 
-          {recording ? (
-            <Box textAlign="center" w="100%" maxW="800px" mx="auto">
-              <Text color="red.500" mb={2}>Recording... ({countdown}s)</Text>
-              <Box bg="#f7fafc" p={4} borderRadius="lg" boxShadow="md" width="100%" display="flex" flexDirection="column" alignItems="center">
-                <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden">
-                  <Box
-                    h="full"
-                    bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
-                    width={`${Math.min(amplitudeLevel * 600, 100)}%`}
-                    transition="width 0.1s linear"
-                  />
-                </Box>
-                <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
-                  {amplitudeLevel > silenceThreshold ? "Speaking..." : "Silent..."}
+          {/* REALTIME TEXT DISPLAY */}
+          {recording && (
+            <Box textAlign="center" w="100%" maxW="800px" mx="auto" p={4} bg="gray.50" borderRadius="lg">
+              <Text color="red.500" fontWeight="bold" mb={2}>Recording... ({countdown}s)</Text>
+              
+              {interimText && (
+                <Text fontSize="lg" color="gray.600" fontStyle="italic">
+                  {interimText}
                 </Text>
+              )}
+              
+              {finalTranscriptRef.current && (
+                <Text mt={3} fontSize="xl" color="teal.600" fontWeight="bold">
+                  ✓ {finalTranscriptRef.current}
+                </Text>
+              )}
+
+              {/* Waveform */}
+              <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" mx="auto">
+                <Box
+                  h="full"
+                  bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
+                  width={`${Math.min(amplitudeLevel * 600, 100)}%`}
+                  transition="width 0.1s linear"
+                />
               </Box>
+              <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
+                {amplitudeLevel > silenceThreshold ? "Speaking..." : "Silent..."}
+              </Text>
             </Box>
-          ) : (
+          )}
+
+          {!recording && !started && (
             <Box mb={4} textAlign="center">
               <Text color={hasMicPermission ? "gray.500" : "red.500"}>
-                {hasMicPermission ? "Ready to record (auto after TTS)" : "Microphone not allowed"}
+                {hasMicPermission ? "Ready (real-time transcription)" : "Microphone not allowed"}
               </Text>
             </Box>
           )}
@@ -472,6 +572,7 @@ const saveAndNext = async (text: string) => {
           </Flex>
         </Box>
 
+        {/* Results Panel - giữ nguyên */}
         <Box flex="1" pl={4}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
@@ -485,7 +586,7 @@ const saveAndNext = async (text: string) => {
                     <Text fontSize="2xl" fontWeight="bold" color={result.score >= 6 ? "teal.500" : "red.500"}>
                       {result.score >= 6 ? "PASS" : "FAIL"}
                     </Text>
-                    <Text mt={2}>Score: {result.score}</Text>
+                    <Text mt={2}>Score: {result.score}/10</Text>
                     <Text mt={2}>{result.feedback}</Text>
                     {result.perQuestionFeedback && (
                       <VStack mt={4} align="start">
