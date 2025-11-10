@@ -658,6 +658,7 @@ export default function Specialized2() {
             </TabPanels>
           </Tabs>
         </Box>
+        
       </Flex>
     </Box>
   );
