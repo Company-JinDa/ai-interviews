@@ -16,6 +16,7 @@ import {
   VStack,
   useToast,
   Spinner,
+  Divider,
 } from "@chakra-ui/react";
 import { FaHome, FaMicrophone, FaPlay } from "react-icons/fa";
 import { MdDirectionsBike, MdOutlineKeyboardArrowRight } from "react-icons/md";
@@ -42,7 +43,7 @@ export default function Specialized2() {
   const category = searchParams.get("category") || "Information Technology";
   const level = searchParams.get("level") || "";
   const role = searchParams.get("role") || "";
-  const questions = (() => {
+  const questions: string[] = (() => {
     try {
       return JSON.parse(searchParams.get("questions") || "[]");
     } catch {
@@ -58,6 +59,7 @@ export default function Specialized2() {
   const [countdown, setCountdown] = useState<number>(60);
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const [started, setStarted] = useState<boolean>(false);
+  const [finished, setFinished] = useState<boolean>(false); // NEW: To prevent restarting
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [amplitudeLevel, setAmplitudeLevel] = useState(0);
@@ -78,7 +80,7 @@ export default function Specialized2() {
   
   const silenceThreshold = 0.008;
   const minRecordingDuration = 500;
-  const silenceTimeout = 10000; // 10s không nói → next
+  const silenceTimeout = 60000; // 60s không nói → next
   const lastSpokenAtRef = useRef<number>(0);
   const recordingStartedAtRef = useRef<number>(0);
   const hasPlayedQuestion = useRef<boolean>(false); // Đảm bảo chỉ play 1 lần
@@ -186,7 +188,7 @@ export default function Specialized2() {
   }, []);
 
   const handleStart = async () => {
-    if (started || questions.length === 0) return;
+    if (started || finished || questions.length === 0) return;
     const ok = await ensureMicPermission();
     if (!ok) return;
 
@@ -213,7 +215,7 @@ export default function Specialized2() {
   };
 
   const runQuestionCycle = async (index: number) => {
-    if (index >= questions.length) {
+    if (index >= questions.length || finished) {
       await finishInterview();
       return;
     }
@@ -257,7 +259,7 @@ export default function Specialized2() {
         recognitionRef.current.start();
         console.log("Web Speech API started");
 
-        // Auto stop khi im lặng 10s
+        // Auto stop khi im lặng 60s
         const checkSilence = () => {
           if (!recording) return;
           const now = Date.now();
@@ -429,7 +431,7 @@ export default function Specialized2() {
   };
 
   const saveAndNext = async (text: string) => {
-    if (currentQ >= questions.length) {
+    if (currentQ >= questions.length || finished) {
       await finishInterview();
       return;
     }
@@ -459,6 +461,7 @@ export default function Specialized2() {
     setRecording(false);
     setStarted(false);
     setIsLoading(true);
+    setFinished(true); // NEW: Mark as finished to prevent restart
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
@@ -530,75 +533,135 @@ export default function Specialized2() {
       </HStack>
 
       <Flex>
-        <Box flex="3" borderRight="1px solid black" minH="70vh" position="relative" display="flex" flexDirection="column" justifyContent="center" alignItems="center">
-          {isLoading && <Spinner size="xl" color="teal.400" mb={4} />}
+        {/* ================== TRÁI - PHỎNG VẤN ================== */}
+        <Box flex="3" borderRight="1px solid black" minH="70vh" position="relative">
+          {isLoading && <Spinner size="xl" color="teal.400" position="absolute" top="20%" left="50%" transform="translateX(-50%)" />}
 
-          <VStack spacing={4} mb={6} w="full" align="center">
-            <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px" mx="auto">
+          <VStack spacing={6} align="center" pb="200px">
+            {/* Câu hỏi hiện tại */}
+            <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px">
               <Text fontWeight="bold" textAlign="center">
                 Question {Math.min(currentQ + 1, questions.length)} / {questions.length}
               </Text>
               <Text mt={2} fontSize="lg" textAlign="center">
-                {questions[currentQ] || (currentQ >= questions.length ? "Evaluating your answers..." : "No question")}
+                {questions[currentQ] || (currentQ >= questions.length ? (finished && !isLoading ? "Interview Completed" : "Evaluating your answers...") : "No question")}
               </Text>
             </Box>
-          </VStack>
 
-          {recording && (
-            <Box textAlign="center" w="100%" maxW="800px" mx="auto" p={4} bg="gray.50" borderRadius="lg">
-              <Text color="red.500" fontWeight="bold" mb={2}>Recording... ({countdown}s)</Text>
-              
-              {liveText && (
-                <Text fontSize="lg" color="teal.500">
-                  ✓ {liveText}
+            {/* Recording UI */}
+            {recording && (
+              <Box textAlign="center" w="100%" maxW="800px" p={4} bg="gray.50" borderRadius="lg">
+                <Text color="red.500" fontWeight="bold" mb={2}>Recording... ({countdown}s)</Text>
+                {liveText && <Text fontSize="lg" color="teal.500">✓ {liveText}</Text>}
+                <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" mx="auto">
+                  <Box
+                    h="full"
+                    bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
+                    width={`${Math.min(amplitudeLevel * 600, 100)}%`}
+                    transition="width 0.1s linear"
+                  />
+                </Box>
+                <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
+                  {amplitudeLevel > silenceThreshold ? "Speaking..." : "Silent..."}
                 </Text>
-              )}
-
-              {/* Waveform */}
-              <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" mx="auto">
-                <Box
-                  h="full"
-                  bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
-                  width={`${Math.min(amplitudeLevel * 600, 100)}%`}
-                  transition="width 0.1s linear"
-                />
               </Box>
-              <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
-                {amplitudeLevel > silenceThreshold ? "Speaking..." : "Silent..."}
-              </Text>
-            </Box>
-          )}
+            )}
 
-          {!recording && !started && (
-            <Box mb={4} textAlign="center">
+            {!recording && !started && !finished && (
               <Text color={hasMicPermission ? "gray.500" : "red.500"}>
                 {hasMicPermission ? "Ready (real-time transcription)" : "Microphone not allowed"}
               </Text>
-            </Box>
-          )}
+            )}
+          </VStack>
 
-          <Flex justify="center" position="absolute" bottom="16" left="0" right="0" gap={4}>
+          {/* ================== NÚT START / NEXT (cố định dưới cùng) ================== */}
+          <Flex
+            justify="center"
+            position="absolute"
+            bottom="16"
+            left="0"
+            right="0"
+            gap={6}
+            px={8}
+          >
             <Button
-              size="lg" color="white" bg={started ? "gray.400" : "teal.400"} borderRadius="full" px={10} py={6} fontSize="xl"
-              _hover={{ bg: started ? "gray.400" : "teal.500" }} onClick={handleStart}
-              isDisabled={started || questions.length === 0}
+              size="lg"
+              color="white"
+              bg={started || finished ? "gray.400" : "teal.400"}
+              borderRadius="full"
+              px={12}
+              py={7}
+              fontSize="xl"
+              _hover={{ bg: started || finished ? "gray.400" : "teal.500" }}
+              onClick={handleStart}
+              isDisabled={started || finished || questions.length === 0}
             >
-              {started ? "Interview in progress..." : "Start"}
+              {started ? "Interview in progress..." : finished ? "Completed" : "Start"}
             </Button>
+
             {recording && (
-              <Button size="lg" colorScheme="gray" borderRadius="full" px={8} py={6} fontSize="xl" onClick={stopRecording}>
+              <Button
+                size="lg"
+                colorScheme="gray"
+                borderRadius="full"
+                px={10}
+                py={7}
+                fontSize="xl"
+                onClick={stopRecording}
+              >
                 Next
               </Button>
             )}
           </Flex>
+
+          {/* ================== YOUR ANSWERS - SAU KHI HOÀN TẤT (dưới nút) ================== */}
+          {finished && answers.length > 0 && (
+            <Box
+              position="absolute"
+              bottom="0"
+              left="0"
+              right="0"
+              bg="gray.50"
+              borderTop="1px solid"
+              borderColor="gray.300"
+              p={6}
+              maxH="50vh"
+              overflowY="auto"
+            >
+              <Text fontSize="xl" fontWeight="bold" mb={4} textAlign="center">
+                📋 Your Answers
+              </Text>
+              <VStack spacing={4} align="stretch" maxW="800px" mx="auto">
+                {questions.map((q: string, i: number) => (
+                  <Box key={i}>
+                    <Box p={4} bg="white" borderRadius="md" boxShadow="sm">
+                      <Text fontWeight="semibold" color="teal.600">
+                        Q{i + 1}: {q}
+                      </Text>
+                      <Text mt={2} color="gray.700">
+                        <strong>Answer:</strong> {answers[i] || "No answer given"}
+                      </Text>
+                    </Box>
+                    {i < questions.length - 1 && <Divider my={2} borderColor="gray.300" />}
+                  </Box>
+                ))}
+              </VStack>
+            </Box>
+          )}
         </Box>
 
+        {/* ================== PHẢI - KẾT QUẢ & GỢI Ý ================== */}
         <Box flex="1" pl={4}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
-              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Interview Results</Tab>
-              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>AI Suggestions</Tab>
+              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
+                Interview Results
+              </Tab>
+              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
+                AI Suggestions
+              </Tab>
             </TabList>
+
             <TabPanels>
               <TabPanel>
                 {result ? (
@@ -611,7 +674,7 @@ export default function Specialized2() {
                     {result.perQuestionFeedback && (
                       <VStack mt={4} align="start">
                         <Text fontWeight="bold">Per-Question Feedback:</Text>
-                        {result.perQuestionFeedback.map((fb: any, i: number) => (
+                        {result.perQuestionFeedback.map((fb: string, i: number) => (
                           <Box key={i} p={2} border="1px solid #eee" borderRadius="md" w="full">
                             <Text fontSize="sm" fontWeight="semibold">Q{i + 1}: {questions[i]}</Text>
                             <Text fontSize="sm">Answer: {answers[i] || "No answer"}</Text>
@@ -658,7 +721,6 @@ export default function Specialized2() {
             </TabPanels>
           </Tabs>
         </Box>
-        
       </Flex>
     </Box>
   );

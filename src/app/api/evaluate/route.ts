@@ -78,7 +78,7 @@ Respond with VALID JSON only (no extra text, no markdown):
     const avgScore = Math.round((totalScore / questions.length) * 10) / 10;
 
     // Gợi ý cải thiện nếu dưới 6.0
-    let suggestion = "Keep practicing!";
+    let suggestion = avgScore >= 6 ? "Excellent performance! Your answers demonstrate strong knowledge and clear communication." : "Keep practicing!";
 
     if (avgScore < 6) {
       const weakPoints = questions
@@ -96,7 +96,18 @@ You are a senior career coach. Candidate scored ${avgScore}/10 overall.
 Weak answers (score < 6):
 ${weakPoints.map((x: any) => `Q: ${x.q}\nAnswer: ${x.a}\nScore: ${x.s}/10`).join("\n\n")}
 
-Give ONE concise, actionable suggestion under 80 words. Respond in plain text.
+For each weak question, provide:
+- A concise explanation of what went wrong.
+- A better sample answer.
+- Actionable tips to improve.
+
+Structure the response as plain text, with sections for each question like:
+Q1: [Question text]
+Issue: [Explanation]
+Improved Answer: [Sample]
+Tips: [Bullet points]
+
+Keep overall under 300 words.
 `.trim();
 
         try {
