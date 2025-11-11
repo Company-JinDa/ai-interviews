@@ -59,7 +59,7 @@ export default function Specialized2() {
   const [countdown, setCountdown] = useState<number>(60);
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const [started, setStarted] = useState<boolean>(false);
-  const [finished, setFinished] = useState<boolean>(false); // NEW: To prevent restarting
+  const [finished, setFinished] = useState<boolean>(false);
   const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [amplitudeLevel, setAmplitudeLevel] = useState(0);
@@ -67,7 +67,6 @@ export default function Specialized2() {
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const [monitoring, setMonitoring] = useState(false);
 
-  // NEW: Web Speech API
   const recognitionRef = useRef<any>(null);
   const finalTranscriptRef = useRef<string>("");
   const interimTranscriptRef = useRef<string>("");
@@ -80,10 +79,10 @@ export default function Specialized2() {
   
   const silenceThreshold = 0.008;
   const minRecordingDuration = 500;
-  const silenceTimeout = 60000; // 60s không nói → next
+  const silenceTimeout = 60000;
   const lastSpokenAtRef = useRef<number>(0);
   const recordingStartedAtRef = useRef<number>(0);
-  const hasPlayedQuestion = useRef<boolean>(false); // Đảm bảo chỉ play 1 lần
+  const hasPlayedQuestion = useRef<boolean>(false);
 
   const ensureMicPermission = async (): Promise<boolean> => {
     if (typeof window === "undefined") return false;
@@ -100,11 +99,10 @@ export default function Specialized2() {
       setHasMicPermission(true);
       return true;
     } catch (err) {
-      console.error("Mic error:", err);
       setHasMicPermission(false);
       toast({
-        title: "Microphone Access Denied",
-        description: "Please allow microphone in browser settings.",
+        title: "Microphone Denied",
+        description: "Allow mic in browser settings.",
         status: "error",
       });
       return false;
@@ -140,13 +138,9 @@ export default function Specialized2() {
     } catch {}
   };
 
-  // ==================== WEB SPEECH API SETUP ====================
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-      console.log("Web Speech API not supported");
-      return;
-    }
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) return;
 
     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     const recognition = new SpeechRecognition();
@@ -158,29 +152,23 @@ export default function Specialized2() {
       let final = finalTranscriptRef.current;
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript + " ";
-        } else {
-          interim += transcript;
-        }
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += t + " ";
+        else interim += t;
       }
       finalTranscriptRef.current = final;
       interimTranscriptRef.current = interim;
-      setLiveText(final + interim); // Hiển thị live text kết hợp final + interim
+      setLiveText(final + interim);
       if (final || interim) lastSpokenAtRef.current = Date.now();
     };
 
-    recognition.onerror = (event: any) => {
-      console.error("Web Speech error:", event.error);
-      if (event.error === "not-allowed") setHasMicPermission(false);
+    recognition.onerror = (e: any) => {
+      if (e.error === "not-allowed") setHasMicPermission(false);
     };
 
     recognition.onend = () => {
-      if (recording) {
-        try {
-          recognition.start();
-        } catch {}
+      if (recording && recognitionRef.current) {
+        try { recognition.start(); } catch {}
       }
     };
 
@@ -192,11 +180,8 @@ export default function Specialized2() {
     const ok = await ensureMicPermission();
     if (!ok) return;
 
-    setStarted(true); setAnswers([]); setCurrentQ(0); setResult(null);
-    finalTranscriptRef.current = "";
-    interimTranscriptRef.current = "";
-    setLiveText("");
-    hasPlayedQuestion.current = false;
+    setStarted(true); setAnswers([]); setCurrentQ(0); setResult(null); setFinished(false);
+    finalTranscriptRef.current = ""; setLiveText(""); hasPlayedQuestion.current = false;
 
     const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
     localStorage.setItem("guestUid", uid);
@@ -204,8 +189,7 @@ export default function Specialized2() {
 
     try {
       const docRef = await addDoc(interviewsRef, {
-        userId: uid,
-        category, level, role, questions, answers: [], score: null, feedback: null, suggestion: null,
+        userId: uid, category, level, role, questions, answers: [], score: null,
         createdAt: serverTimestamp(), startedAt: serverTimestamp(), finished: false,
       });
       interviewDocRef.current = docRef;
@@ -224,28 +208,21 @@ export default function Specialized2() {
     setCountdown(60);
     setIsLoading(false);
     finalTranscriptRef.current = "";
-    interimTranscriptRef.current = "";
     setLiveText("");
     hasPlayedQuestion.current = false;
 
-    try {
-      if (!hasPlayedQuestion.current) {
-        await playQuestion(questions[index]);
-        hasPlayedQuestion.current = true;
-      }
-      playBeep();
-      await new Promise((r) => setTimeout(r, 300));
-      await startRecording();
-    } catch {
-      await saveAndNext("");
+    if (!hasPlayedQuestion.current) {
+      await playQuestion(questions[index]);
+      hasPlayedQuestion.current = true;
     }
+    playBeep();
+    await new Promise(r => setTimeout(r, 300));
+    await startRecording();
   };
 
   const startRecording = async () => {
-    if (!micStream) {
-      const ok = await ensureMicPermission();
-      if (!ok) return;
-    }
+    if (!micStream) await ensureMicPermission();
+    if (!micStream) return;
 
     setRecording(true);
     setAmplitudeLevel(0);
@@ -253,18 +230,13 @@ export default function Specialized2() {
     lastSpokenAtRef.current = Date.now();
     recordingStartedAtRef.current = Date.now();
 
-    // ƯU TIÊN WEB SPEECH API (REALTIME, FREE)
     if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
-        console.log("Web Speech API started");
-
-        // Auto stop khi im lặng 60s
         const checkSilence = () => {
           if (!recording) return;
           const now = Date.now();
-          if (now - lastSpokenAtRef.current > silenceTimeout &&
-              now - recordingStartedAtRef.current > minRecordingDuration) {
+          if (now - lastSpokenAtRef.current > silenceTimeout && now - recordingStartedAtRef.current > minRecordingDuration) {
             stopRecording();
             return;
           }
@@ -272,57 +244,36 @@ export default function Specialized2() {
         };
         checkSilence();
 
-        // Countdown 60s
         if (timerRef.current) clearInterval(timerRef.current);
         timerRef.current = setInterval(() => {
-          setCountdown((c) => {
-            if (c <= 1) {
-              clearInterval(timerRef.current);
-              stopRecording();
-              return 0;
-            }
+          setCountdown(c => {
+            if (c <= 1) { clearInterval(timerRef.current); stopRecording(); return 0; }
             return c - 1;
           });
         }, 1000);
-
-        return; // Dùng Web Speech → thoát luôn
-      } catch (err) {
-        console.log("Web Speech failed, fallback to MediaRecorder");
-      }
+        return;
+      } catch (err) { console.log("Speech API failed"); }
     }
 
-    // FALLBACK: MediaRecorder + Google Cloud STT
+    // MediaRecorder fallback
     const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm;codecs=opus" });
     mediaRecorderRef.current = recorder;
-
-    recorder.ondataavailable = (e) => e.data.size > 0 && audioChunksRef.current.push(e.data);
-
+    recorder.ondataavailable = e => e.data.size > 0 && audioChunksRef.current.push(e.data);
     recorder.onstop = async () => {
-      setMonitoring(false);
-      audioContext?.close();
-      setAudioContext(null);
-      setAnalyser(null);
-
+      setMonitoring(false); audioContext?.close();
       const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-      if (blob.size > 100) {
-        await handleRecordedBlob(blob);
-      } else {
-        await saveAndNext("");
-      }
+      if (blob.size > 100) await handleRecordedBlob(blob);
+      else await saveAndNext("");
     };
 
-    // Tạo Audio Context để đo âm thanh
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = new AudioContext();
     const source = ctx.createMediaStreamSource(micStream!);
     const analyserNode = ctx.createAnalyser();
     analyserNode.fftSize = 2048;
     source.connect(analyserNode);
-    setAudioContext(ctx);
-    setAnalyser(analyserNode);
-    setMonitoring(true);
+    setAudioContext(ctx); setAnalyser(analyserNode); setMonitoring(true);
 
     const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-
     const monitor = () => {
       if (!monitoring || !recording) return;
       analyserNode.getByteTimeDomainData(dataArray);
@@ -333,35 +284,21 @@ export default function Specialized2() {
       }
       const rms = Math.sqrt(sum / dataArray.length);
       setAmplitudeLevel(rms);
-
-      const now = Date.now();
-      if (rms > silenceThreshold) {
-        lastSpokenAtRef.current = now;
-      } else if (
-        now - lastSpokenAtRef.current > silenceTimeout &&
-        now - recordingStartedAtRef.current > minRecordingDuration
-      ) {
+      if (rms > silenceThreshold) lastSpokenAtRef.current = Date.now();
+      else if (Date.now() - lastSpokenAtRef.current > silenceTimeout && Date.now() - recordingStartedAtRef.current > minRecordingDuration) {
         stopRecording();
         return;
       }
-
       requestAnimationFrame(monitor);
     };
     monitor();
 
     recorder.start();
 
-    // Countdown + FORCE STOP khi hết 60s
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(timerRef.current);
-          if (mediaRecorderRef.current?.state === "recording") {
-            mediaRecorderRef.current.stop();
-          }
-          return 0;
-        }
+      setCountdown(c => {
+        if (c <= 1) { clearInterval(timerRef.current); recorder.stop(); return 0; }
         return c - 1;
       });
     }, 1000);
@@ -369,7 +306,6 @@ export default function Specialized2() {
 
   const stopRecording = async () => {
     if (!recording) return;
-
     setRecording(false);
     clearInterval(timerRef.current);
 
@@ -377,25 +313,15 @@ export default function Specialized2() {
       try { recognitionRef.current.stop(); } catch {}
     }
 
-    // Nếu có kết quả từ Web Speech → dùng luôn
     if (finalTranscriptRef.current.trim()) {
-      const text = finalTranscriptRef.current.trim();
-      console.log("Web Speech final:", text);
-      await saveAndNext(text);
+      await saveAndNext(finalTranscriptRef.current.trim());
       return;
     }
 
-    // Fallback: dừng MediaRecorder
     if (mediaRecorderRef.current?.state === "recording") {
-      try {
-        mediaRecorderRef.current.requestData();
-        mediaRecorderRef.current.stop();
-      } catch (err) {
-        console.error("Error stopping recorder:", err);
-      }
+      mediaRecorderRef.current.stop();
     }
 
-    // Fallback: nếu onstop không chạy → tự động next sau 1.5s
     setTimeout(() => {
       if (audioChunksRef.current.length > 0) {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
@@ -417,11 +343,9 @@ export default function Specialized2() {
           body: JSON.stringify({ audio: base64 }),
           headers: { "Content-Type": "application/json" },
         });
-        if (!res.ok) throw new Error("STT failed");
         const { transcription } = await res.json();
         await saveAndNext(transcription.trim());
-      } catch (err) {
-        console.error("STT error:", err);
+      } catch {
         await saveAndNext("");
       } finally {
         setIsLoading(false);
@@ -431,7 +355,7 @@ export default function Specialized2() {
   };
 
   const saveAndNext = async (text: string) => {
-    if (currentQ >= questions.length || finished) {
+    if (finished || currentQ >= questions.length) {
       await finishInterview();
       return;
     }
@@ -443,11 +367,7 @@ export default function Specialized2() {
       await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
     }
 
-    setIsLoading(false);
-    await new Promise((r) => setTimeout(r, 500));
-
     const nextQ = currentQ + 1;
-
     if (nextQ >= questions.length) {
       setCurrentQ(questions.length);
       await finishInterview();
@@ -458,22 +378,22 @@ export default function Specialized2() {
   };
 
   const finishInterview = async () => {
+    if (finished) return; // CHỐNG GỌI LẠI
     setRecording(false);
     setStarted(false);
     setIsLoading(true);
-    setFinished(true); // NEW: Mark as finished to prevent restart
+    setFinished(true);
+
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
         body: JSON.stringify({ questions, answers }),
         headers: { "Content-Type": "application/json" },
       });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Evaluation failed");
-      }
+      if (!res.ok) throw new Error("Evaluation failed");
       const data = await res.json();
       setResult(data);
+
       if (interviewDocRef.current) {
         await updateDoc(interviewDocRef.current, {
           score: data.score,
@@ -484,13 +404,13 @@ export default function Specialized2() {
           finishedAt: serverTimestamp(),
         });
       }
+
       toast({
-        title: "Completed!",
-        description: data.score >= 6 ? "PASS!" : "See AI Suggestions!",
+        title: "Done!",
+        description: data.score >= 6 ? "PASS!" : "Check suggestions!",
         status: data.score >= 6 ? "success" : "warning",
       });
     } catch (err) {
-      console.error(err);
       toast({ title: "Error", description: "Failed to evaluate.", status: "error" });
     } finally {
       setIsLoading(false);
@@ -501,7 +421,7 @@ export default function Specialized2() {
     const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
     localStorage.setItem("guestUid", uid);
     const q = firestoreQuery(collection(db, "interviews"), where("userId", "==", uid), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, (s) => setHistoryRealtime(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsub = onSnapshot(q, s => setHistoryRealtime(s.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => unsub();
   }, []);
 
@@ -533,57 +453,37 @@ export default function Specialized2() {
       </HStack>
 
       <Flex>
-        {/* ================== TRÁI - PHỎNG VẤN ================== */}
         <Box flex="3" borderRight="1px solid black" minH="70vh" position="relative">
           {isLoading && <Spinner size="xl" color="teal.400" position="absolute" top="20%" left="50%" transform="translateX(-50%)" />}
 
           <VStack spacing={6} align="center" pb="200px">
-            {/* Câu hỏi hiện tại */}
             <Box p={6} border="1px solid" borderColor="teal.400" borderRadius="md" bg="teal.50" w="full" maxW="800px">
               <Text fontWeight="bold" textAlign="center">
                 Question {Math.min(currentQ + 1, questions.length)} / {questions.length}
               </Text>
               <Text mt={2} fontSize="lg" textAlign="center">
-                {questions[currentQ] || (currentQ >= questions.length ? (finished && !isLoading ? "Interview Completed" : "Evaluating your answers...") : "No question")}
+                {currentQ < questions.length ? questions[currentQ] : (finished ? "Interview Completed" : "Evaluating...")}
               </Text>
             </Box>
 
-            {/* Recording UI */}
             {recording && (
               <Box textAlign="center" w="100%" maxW="800px" p={4} bg="gray.50" borderRadius="lg">
                 <Text color="red.500" fontWeight="bold" mb={2}>Recording... ({countdown}s)</Text>
-                {liveText && <Text fontSize="lg" color="teal.500">✓ {liveText}</Text>}
+                {liveText && <Text fontSize="lg" color="teal.500">Check: {liveText}</Text>}
                 <Box mt={3} h="10px" w="200px" bg="gray.200" borderRadius="full" overflow="hidden" mx="auto">
-                  <Box
-                    h="full"
-                    bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"}
-                    width={`${Math.min(amplitudeLevel * 600, 100)}%`}
-                    transition="width 0.1s linear"
-                  />
+                  <Box h="full" bg={amplitudeLevel > silenceThreshold ? "teal.400" : "gray.400"} width={`${Math.min(amplitudeLevel * 600, 100)}%`} transition="width 0.1s linear" />
                 </Box>
-                <Text fontSize="sm" mt={2} color={amplitudeLevel > silenceThreshold ? "teal.500" : "gray.500"}>
-                  {amplitudeLevel > silenceThreshold ? "Speaking..." : "Silent..."}
-                </Text>
               </Box>
             )}
 
             {!recording && !started && !finished && (
               <Text color={hasMicPermission ? "gray.500" : "red.500"}>
-                {hasMicPermission ? "Ready (real-time transcription)" : "Microphone not allowed"}
+                {hasMicPermission ? "Ready" : "Mic not allowed"}
               </Text>
             )}
           </VStack>
 
-          {/* ================== NÚT START / NEXT (cố định dưới cùng) ================== */}
-          <Flex
-            justify="center"
-            position="absolute"
-            bottom="16"
-            left="0"
-            right="0"
-            gap={6}
-            px={8}
-          >
+          <Flex justify="center" position="absolute" bottom="16" left="0" right="0" gap={6} px={8}>
             <Button
               size="lg"
               color="white"
@@ -596,53 +496,24 @@ export default function Specialized2() {
               onClick={handleStart}
               isDisabled={started || finished || questions.length === 0}
             >
-              {started ? "Interview in progress..." : finished ? "Completed" : "Start"}
+              {started ? "In progress..." : finished ? "Completed" : "Start"}
             </Button>
 
             {recording && (
-              <Button
-                size="lg"
-                colorScheme="gray"
-                borderRadius="full"
-                px={10}
-                py={7}
-                fontSize="xl"
-                onClick={stopRecording}
-              >
+              <Button size="lg" colorScheme="gray" borderRadius="full" px={10} py={7} fontSize="xl" onClick={stopRecording}>
                 Next
               </Button>
             )}
           </Flex>
 
-          {/* ================== YOUR ANSWERS - SAU KHI HOÀN TẤT (dưới nút) ================== */}
           {finished && answers.length > 0 && (
-            <Box
-              position="absolute"
-              bottom="0"
-              left="0"
-              right="0"
-              bg="gray.50"
-              borderTop="1px solid"
-              borderColor="gray.300"
-              p={6}
-              maxH="50vh"
-              overflowY="auto"
-            >
-              <Text fontSize="xl" fontWeight="bold" mb={4} textAlign="center">
-                📋 Your Answers
-              </Text>
+            <Box position="absolute" bottom="0" left="0" right="0" bg="gray.50" borderTop="1px solid" borderColor="gray.300" p={6} maxH="50vh" overflowY="auto">
+              <Text fontSize="xl" fontWeight="bold" mb={4} textAlign="center">Your Answers</Text>
               <VStack spacing={4} align="stretch" maxW="800px" mx="auto">
                 {questions.map((q: string, i: number) => (
-                  <Box key={i}>
-                    <Box p={4} bg="white" borderRadius="md" boxShadow="sm">
-                      <Text fontWeight="semibold" color="teal.600">
-                        Q{i + 1}: {q}
-                      </Text>
-                      <Text mt={2} color="gray.700">
-                        <strong>Answer:</strong> {answers[i] || "No answer given"}
-                      </Text>
-                    </Box>
-                    {i < questions.length - 1 && <Divider my={2} borderColor="gray.300" />}
+                  <Box key={i} p={4} bg="white" borderRadius="md" boxShadow="sm">
+                    <Text fontWeight="semibold" color="teal.600">Q{i + 1}: {q}</Text>
+                    <Text mt={2} color="gray.700"><strong>Answer:</strong> {answers[i] || "No answer"}</Text>
                   </Box>
                 ))}
               </VStack>
@@ -650,68 +521,57 @@ export default function Specialized2() {
           )}
         </Box>
 
-        {/* ================== PHẢI - KẾT QUẢ & GỢI Ý ================== */}
         <Box flex="1" pl={4}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
-              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
-                Interview Results
-              </Tab>
-              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>
-                AI Suggestions
-              </Tab>
+              <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Results</Tab>
+              <Tab fontSize="lg" ml={4} _selected={{ fontWeight: "bold", borderBottom: "2px solid black" }}>Suggestions</Tab>
             </TabList>
 
             <TabPanels>
               <TabPanel>
                 {result ? (
                   <Box>
-                    <Text fontSize="2xl" fontWeight="bold" color={result.score >= 6 ? "teal.500" : "red.500"}>
+                    <Text fontSize="3xl" fontWeight="bold" color={result.score >= 6 ? "teal.500" : "red.500"}>
                       {result.score >= 6 ? "PASS" : "FAIL"}
                     </Text>
-                    <Text mt={2}>Score: {result.score}</Text>
-                    <Text mt={2}>{result.feedback}</Text>
+                    <Text fontSize="xl" mt={2}>Score: <strong>{result.score}/10</strong></Text>
+                    <Text mt={2} fontStyle="italic" color="gray.600">{result.feedback}</Text>
+
                     {result.perQuestionFeedback && (
-                      <VStack mt={4} align="start">
-                        <Text fontWeight="bold">Per-Question Feedback:</Text>
+                      <VStack mt={6} align="start" spacing={3}>
+                        <Text fontWeight="bold" fontSize="lg">Feedback:</Text>
                         {result.perQuestionFeedback.map((fb: string, i: number) => (
-                          <Box key={i} p={2} border="1px solid #eee" borderRadius="md" w="full">
-                            <Text fontSize="sm" fontWeight="semibold">Q{i + 1}: {questions[i]}</Text>
-                            <Text fontSize="sm">Answer: {answers[i] || "No answer"}</Text>
-                            <Text fontSize="sm">Feedback: {fb}</Text>
+                          <Box key={i} p={4} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200">
+                            <Text fontWeight="semibold" color="teal.600" fontSize="sm">
+                              Q{i + 1} • Score: {result.perQuestionScores?.[i] || "?"}/10
+                            </Text>
+                            <Text fontSize="sm" color="gray.700" mt={1}>
+                              <strong>Answer:</strong> {answers[i] || "No answer"}
+                            </Text>
+                            <Text fontSize="sm" mt={2} color="gray.800">
+                              <strong>Feedback:</strong> {fb}
+                            </Text>
                           </Box>
                         ))}
                       </VStack>
                     )}
                   </Box>
                 ) : (
-                  <Text>Interview result will appear here.</Text>
+                  <Text color="gray.500">Finish to see results.</Text>
                 )}
-                <Box mt={6}>
-                  <Text fontSize="sm" fontWeight="bold">Recent Interviews</Text>
-                  <VStack align="start" mt={2} spacing={2}>
-                    {historyRealtime.length === 0 ? (
-                      <Text fontSize="sm" color="gray.500">No interviews yet</Text>
-                    ) : (
-                      historyRealtime.map((h) => (
-                        <Box key={h.id} p={2} border="1px solid #eee" borderRadius="md" w="full">
-                          <Text fontSize="sm" fontWeight="semibold">{h.category} - {h.role} ({h.level})</Text>
-                          <Text fontSize="sm">Score: {h.score || "N/A"}</Text>
-                          <Text fontSize="sm">Date: {h.createdAt?.toDate?.()?.toLocaleString?.() || "N/A"}</Text>
-                        </Box>
-                      ))
-                    )}
-                  </VStack>
-                </Box>
+
+               
               </TabPanel>
+
               <TabPanel>
                 {result ? (
                   <Box>
                     <Text mb={2} fontWeight="bold" color={result.score < 6 ? "red.500" : "green.500"}>
-                      {result.score < 6 ? "AI Suggestions to Improve" : "Great Job!"}
+                      {result.score < 6 ? "Improve These Answers:" : "Great Job!"}
                     </Text>
                     <Text whiteSpace="pre-wrap" fontSize="sm">
-                      {result.suggestion || "No suggestions needed."}
+                      {result.suggestion || "No suggestions."}
                     </Text>
                   </Box>
                 ) : (
