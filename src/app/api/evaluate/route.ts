@@ -6,7 +6,7 @@ const model = genAI.getGenerativeModel({
   model: "gemini-1.5-flash",
   generationConfig: {
     responseMimeType: "application/json",
-    temperature: 0.7,
+    temperature: 0.6,
     topP: 0.8,
     maxOutputTokens: 1024,
   },
@@ -16,18 +16,10 @@ export async function POST(req: Request) {
   try {
     const { questions, answers } = await req.json();
 
-    if (
-      !Array.isArray(questions) ||
-      !Array.isArray(answers) ||
-      questions.length === 0
-    ) {
-      return new Response(
-        JSON.stringify({ error: "Invalid data: questions and answers must be non-empty arrays" }),
-        { status: 400 }
-      );
+    if (!Array.isArray(questions) || !Array.isArray(answers) || questions.length === 0) {
+      return new Response(JSON.stringify({ error: "Invalid input" }), { status: 400 });
     }
 
-    // Pad answers
     const paddedAnswers = answers.length < questions.length
       ? [...answers, ...Array(questions.length - answers.length).fill("(No answer given)")]
       : answers.slice(0, questions.length);
@@ -35,88 +27,100 @@ export async function POST(req: Request) {
     const perQuestionScores: number[] = [];
     const perQuestionFeedback: string[] = [];
 
+    // Đánh giá từng câu – BẮT BUỘC JSON chuẩn
     for (let i = 0; i < questions.length; i++) {
       const prompt = `
-You are an expert interviewer.
+You are a senior technical interviewer.
 
 Question: "${questions[i]}"
 Answer: "${paddedAnswers[i]}"
 
-Rate 1-10 and give short feedback.
+Rate 1-10 and give short, clear feedback.
 
-Return ONLY JSON:
+Return ONLY this JSON (no extra text, no markdown):
 {
   "score": 7,
-  "feedback": "Good structure, missing performance tip."
+  "feedback": "Good structure, but lacks real-world example."
 }
 `.trim();
 
+      let score = 1;
+      let feedback = "No feedback generated.";
+
       try {
         const result = await model.generateContent(prompt);
-        const text = await result.response.text();
-        const cleaned = text.trim().replace(/^```json\s*|```$/g, "").trim();
+        const text = (await result.response.text()).trim();
+        const cleaned = text.replace(/^```json|```$/g, "").trim();
         const json = JSON.parse(cleaned);
-
-        // Sửa lỗi TypeScript: Number(json.score) → Number(json.score)
-        const score = Math.max(1, Math.min(10, Number(json.score) || 1));
-        const feedback = (json.feedback || "No feedback.").trim();
-
-        perQuestionScores.push(score);
-        perQuestionFeedback.push(feedback);
+        score = Math.max(1, Math.min(10, Number(json.score) || 1));
+        feedback = (json.feedback || "No feedback.").trim();
       } catch (err) {
-        perQuestionScores.push(1);
-        perQuestionFeedback.push("Evaluation failed.");
+        console.warn(`Gemini failed on Q${i + 1}, using fallback`);
+        // Fallback: Đánh giá đơn giản dựa trên độ dài
+        const len = paddedAnswers[i].length;
+        if (len < 20) {
+          score = 2;
+          feedback = "Answer too short. Need more details.";
+        } else if (len < 100) {
+          score = 5;
+          feedback = "Basic answer. Add examples and structure.";
+        } else {
+          score = 7;
+          feedback = "Decent length. Improve clarity and depth.";
+        }
       }
+
+      perQuestionScores.push(score);
+      perQuestionFeedback.push(feedback);
     }
 
     const avgScore = Math.round((perQuestionScores.reduce((a, b) => a + b, 0) / questions.length) * 10) / 10;
 
-    // Gợi ý cho TẤT CẢ câu < 6
+    // === GỢI Ý CẢI THIỆN: CHI TIẾT, TỪNG CÂU, CÁCH ĐẠT ≥ 6 ĐIỂM ===
     let suggestion = avgScore >= 6
-      ? "Strong performance! You're interview-ready. Keep practicing!"
-      : "Here are suggestions to improve your weak answers:";
+      ? "Excellent! You're well-prepared. Keep practicing with real scenarios."
+      : "Here’s how to improve each weak answer to score 6+:";
 
     const weakQuestions = questions
-      .map((q: string, i: number) => ({
-        q,
-        a: paddedAnswers[i],
-        s: perQuestionScores[i],
-        idx: i + 1,
-      }))
+      .map((q, i) => ({ q, a: paddedAnswers[i], s: perQuestionScores[i], idx: i + 1 }))
       .filter(x => x.s < 6);
 
     if (weakQuestions.length > 0) {
       const suggestionPrompt = `
-You are a senior career coach. Overall score: ${avgScore}/10.
+You are a senior interview coach. Candidate scored ${avgScore}/10.
 
-Improve ALL these weak answers (score < 6):
+Improve these weak answers (score < 6) to reach 6+.
 
-${weakQuestions.map(w => `Q${w.idx}: ${w.q}\nAnswer: ${w.a}\nScore: ${w.s}/10`).join("\n\n")}
+For EACH question:
+- Issue: What’s wrong?
+- How to score 6+: Key points to include
+- Sample Answer: Natural, confident, structured (100-150 words)
 
-For EACH question, output:
-Q[Num]: [Short preview...]
-Issue: [What went wrong]
-Improved Answer: [Strong sample]
-Tips:
-• [Tip 1]
-• [Tip 2]
+Format (plain text):
+Q1: [Short preview]
+Issue: ...
+How to score 6+: ...
+Sample Answer: ...
 
-Keep total < 600 words. Plain text only.
+Questions:
+${weakQuestions.map(w => `Q${w.idx}: ${w.q}\nAnswer given: ${w.a}`).join("\n\n")}
+
+Keep total under 600 words.
 `.trim();
 
       try {
         const result = await model.generateContent(suggestionPrompt);
         const text = await result.response.text();
-        suggestion = text.trim() || "Practice explaining concepts with examples.";
+        suggestion = text.trim() || "Add more structure, examples, and confidence.";
       } catch (err) {
-        suggestion = "Focus on depth, structure, and real-world examples.";
+        suggestion = "For each weak answer: explain with examples, use STAR method, speak clearly.";
       }
     }
 
     return new Response(
       JSON.stringify({
         score: avgScore,
-        feedback: `Score: ${avgScore}/10. ${avgScore >= 6 ? "PASS!" : "See suggestions."}`,
+        feedback: `Overall: ${avgScore}/10. ${avgScore >= 6 ? "PASS!" : "See suggestions to improve."}`,
         perQuestionFeedback,
         suggestion,
         perQuestionScores,
@@ -125,10 +129,7 @@ Keep total < 600 words. Plain text only.
     );
   } catch (error: any) {
     console.error("Evaluate error:", error);
-    return new Response(
-      JSON.stringify({ error: "Server error", details: error.message }),
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ error: "Server error" }), { status: 500 });
   }
 }
 
