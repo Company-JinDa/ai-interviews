@@ -518,7 +518,7 @@ export default function Specialized2() {
                   <Text color="gray.500">Complete the interview to see results.</Text>
                 )}
 
-                <Box mt={8}>
+                {/* <Box mt={8}>
                   <Text fontWeight="bold" fontSize="sm">Recent Interviews</Text>
                   {historyRealtime.length === 0 ? (
                     <Text fontSize="sm" color="gray.500" mt={2}>No history yet</Text>
@@ -532,7 +532,7 @@ export default function Specialized2() {
                       ))}
                     </VStack>
                   )}
-                </Box>
+                </Box> */}
               </TabPanel>
 
               {/* AI SUGGESTIONS */}
