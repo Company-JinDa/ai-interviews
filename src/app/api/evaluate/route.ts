@@ -76,7 +76,7 @@ Return ONLY this JSON (no extra text, no markdown):
 
     const avgScore = Math.round((perQuestionScores.reduce((a, b) => a + b, 0) / questions.length) * 10) / 10;
 
-    // === GỢI Ý CẢI THIỆN: CHI TIẾT, TỪNG CÂU, CÁCH ĐẠT ≥ 6 ĐIỂM ===
+    // === GỢI Ý CẢI THIỆN: SỬA DỰA TRÊN CÂU TRẢ LỜI GỐC ===
     let suggestion = avgScore >= 6
       ? "Excellent! You're well-prepared. Keep practicing with real scenarios."
       : "Here’s how to improve each weak answer to score 6+:";
@@ -89,23 +89,19 @@ Return ONLY this JSON (no extra text, no markdown):
       const suggestionPrompt = `
 You are a senior interview coach. Candidate scored ${avgScore}/10.
 
-Improve these weak answers (score < 6) to reach 6+.
+For each weak answer (score < 6), provide:
+- Issue: What's wrong with the original answer? (short, 1-2 sentences)
+- Improved Answer: Rewrite the answer based on the original one. Keep good parts, fix errors, add structure (e.g., STAR method), examples, and depth to score 6+. Make it natural, confident, 100-150 words.
 
-For EACH question:
-- Issue: What’s wrong?
-- How to score 6+: Key points to include
-- Sample Answer: Natural, confident, structured (100-150 words)
-
-Format (plain text):
-Q1: [Short preview]
+Format (plain text, no markdown):
+Q1: [Question preview]
 Issue: ...
-How to score 6+: ...
-Sample Answer: ...
+Improved Answer: ...
 
 Questions:
-${weakQuestions.map(w => `Q${w.idx}: ${w.q}\nAnswer given: ${w.a}`).join("\n\n")}
+${weakQuestions.map(w => `Q${w.idx}: ${w.q}\nOriginal Answer: ${w.a}`).join("\n\n")}
 
-Keep total under 600 words.
+Keep total under 600 words. Focus on making the improved answer reusable for retry.
 `.trim();
 
       try {

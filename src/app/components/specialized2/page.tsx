@@ -101,6 +101,7 @@ export default function Specialized2() {
 
   // ===================== TTS =====================
   const playQuestion = async (text: string) => {
+    if (finished) return; // THÊM: Không play nếu finished
     try {
       const res = await fetch("/api/tts", { method: "POST", body: JSON.stringify({ text }), headers: { "Content-Type": "application/json" } });
       if (res.ok) {
@@ -156,7 +157,7 @@ export default function Specialized2() {
 
   // ===================== START INTERVIEW =====================
   const handleStart = async () => {
-    if (started || finished || questions.length === 0) return;
+    if (started || finished || questions.length === 0) return; // THÊM: Không start nếu finished
     const ok = await ensureMicPermission();
     if (!ok) return;
 
@@ -185,6 +186,7 @@ export default function Specialized2() {
 
   // ===================== QUESTION CYCLE =====================
   const runQuestionCycle = async (index: number) => {
+    if (finished) return; // THÊM: Không run nếu finished
     if (index >= questions.length || finished) {
       await finishInterview();
       return;
