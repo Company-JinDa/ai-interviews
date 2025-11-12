@@ -13,7 +13,6 @@ export async function POST(req: Request) {
     if (audioBuffer.length > 1 * 1024 * 1024) {
       return new Response(JSON.stringify({ error: "Audio too long" }), { status: 400 });
     }
-
     const [response] = await client.recognize({
       config: {
         encoding: "WEBM_OPUS",
@@ -22,7 +21,6 @@ export async function POST(req: Request) {
       },
       audio: { content: audioBuffer },
     });
-
     const transcription = response.results
       ?.map((r) => r.alternatives?.[0]?.transcript)
       .join(" ") || "";
