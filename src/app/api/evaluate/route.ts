@@ -31,7 +31,6 @@ export async function POST(req: Request) {
 
       let score = 3;
       let feedback = "Basic answer.";
-
       try {
         const result = await model.generateContent(prompt);
         const text = await result.response.text();
@@ -52,11 +51,9 @@ export async function POST(req: Request) {
         else if (len < 150) { score = 5; feedback = "Basic. Add structure."; }
         else { score = 7; feedback = "Good length. Add examples."; }
       }
-
       perQuestionScores.push(score);
       perQuestionFeedback.push(feedback);
     }
-
     const avgScore = Math.round(perQuestionScores.reduce((a, b) => a + b, 0) / questions.length * 10) / 10;
 
     let suggestion = "";
@@ -70,7 +67,6 @@ export async function POST(req: Request) {
       }
     }
     suggestion = suggestion.trim();
-
     return new Response(JSON.stringify({
       score: avgScore,
       feedback: `Overall: ${avgScore}/10`,
@@ -83,5 +79,4 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Server error" }), { status: 500 });
   }
 }
-
 export const dynamic = "force-dynamic";
