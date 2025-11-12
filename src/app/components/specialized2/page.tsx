@@ -633,7 +633,6 @@ export default function Specialized2() {
               </Box>
             )}
           </VStack>
-
           <Flex justify="center" position="absolute" bottom="16" left="0" right="0" gap={6} px={8}>
             <Button
               size="lg"
@@ -651,7 +650,6 @@ export default function Specialized2() {
               </Button>
             )}
           </Flex>
-
           {finished && answers.length > 0 && (
             <Box position="absolute" bottom="0" left="0" right="0" bg="gray.50" borderTop="1px solid" borderColor="gray.300" p={6} maxH="50vh" overflowY="auto">
               <Text fontSize="xl" fontWeight="bold" mb={4} textAlign="center">Your Answers</Text>
@@ -673,7 +671,6 @@ export default function Specialized2() {
               <Tab fontSize="lg" _selected={{ fontWeight: "bold", borderBottom: "3px solid black" }}>Results</Tab>
               <Tab fontSize="lg" ml={6} _selected={{ fontWeight: "bold", borderBottom: "3px solid black" }}>AI Suggestions</Tab>
             </TabList>
-
             <TabPanels mt={4}>
               <TabPanel>
                 {result ? (
