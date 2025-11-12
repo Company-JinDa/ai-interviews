@@ -11,7 +11,7 @@ export async function POST(req: Request) {
 
     const [response] = await client.synthesizeSpeech({
       input: { text },
-      voice: { languageCode: "en-US", ssmlGender: "NEUTRAL" },
+      voice: { languageCode: "en-UK", ssmlGender: "NEUTRAL" },
       audioConfig: { audioEncoding: "MP3" },
     });
 
