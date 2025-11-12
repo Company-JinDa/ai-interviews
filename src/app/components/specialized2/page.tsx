@@ -701,7 +701,6 @@ export default function Specialized2() {
                   <Text color="gray.500">Complete the interview to see results.</Text>
                 )}
               </TabPanel>
-
               <TabPanel>
                 {result ? (
                   <Box>
