@@ -27,12 +27,32 @@ import {
   collection,
   doc,
   serverTimestamp,
-  onSnapshot,
   orderBy,
   query as firestoreQuery,
   updateDoc,
   where,
+  getDocs,
 } from "firebase/firestore";
+
+// ==================== INTERFACE ====================
+interface InterviewData {
+  id?: string;
+  userId: string;
+  category: string;
+  level: string;
+  role: string;
+  questions: string[];
+  answers: string[];
+  score: number | null;
+  feedback: string;
+  perQuestionFeedback: string[];
+  suggestion: string;
+  perQuestionScores: number[];
+  createdAt: any;
+  startedAt: any;
+  finishedAt?: any;
+  finished: boolean;
+}
 
 export default function Specialized2() {
   const router = useRouter();
@@ -58,8 +78,10 @@ export default function Specialized2() {
   const [countdown, setCountdown] = useState<number>(60);
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
   const [started, setStarted] = useState<boolean>(false);
-  const [finished, setFinished] = useState<boolean>(false); // <-- QUAN TRỌNG: chặn mọi hành vi sau khi hoàn thành
-  const [historyRealtime, setHistoryRealtime] = useState<any[]>([]);
+  const [finished, setFinished] = useState<boolean>(false);
+  const [interviewId, setInterviewId] = useState<string | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
+  const [retryQuestion, setRetryQuestion] = useState<number | null>(null);
 
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [amplitudeLevel, setAmplitudeLevel] = useState(0);
@@ -101,7 +123,7 @@ export default function Specialized2() {
 
   // ===================== TTS =====================
   const playQuestion = async (text: string) => {
-    if (finished) return; // THÊM: Không play nếu finished
+    if (finished && retryQuestion === null) return;
     try {
       const res = await fetch("/api/tts", { method: "POST", body: JSON.stringify({ text }), headers: { "Content-Type": "application/json" } });
       if (res.ok) {
@@ -144,7 +166,7 @@ export default function Specialized2() {
         const t = e.results[i][0].transcript;
         e.results[i].isFinal ? final += t + " " : interim += t;
       }
-      finalTranscriptRef.current = finalTranscriptRef.current + final;
+      finalTranscriptRef.current += final;
       setLiveText(finalTranscriptRef.current + interim);
       if (final || interim) lastSpokenAtRef.current = Date.now();
     };
@@ -155,9 +177,69 @@ export default function Specialized2() {
     recognitionRef.current = recognition;
   }, []);
 
+  // ===================== FIND EXISTING INTERVIEW =====================
+  const findExistingInterview = async (uid: string): Promise<InterviewData | null> => {
+    const q = firestoreQuery(
+      collection(db, "interviews"),
+      where("userId", "==", uid),
+      where("finished", "==", false),
+      orderBy("createdAt", "desc")
+    );
+    const snapshot = await getDocs(q);
+    const docSnap = snapshot.docs[0];
+    if (!docSnap) return null;
+
+    const data = docSnap.data() as any;
+    return {
+      id: docSnap.id,
+      userId: data.userId || uid,
+      category: data.category || "",
+      level: data.level || "",
+      role: data.role || "",
+      questions: Array.isArray(data.questions) ? data.questions : [],
+      answers: Array.isArray(data.answers) ? data.answers : [],
+      score: data.score ?? null,
+      feedback: data.feedback || "",
+      perQuestionFeedback: Array.isArray(data.perQuestionFeedback) ? data.perQuestionFeedback : [],
+      suggestion: data.suggestion || "",
+      perQuestionScores: Array.isArray(data.perQuestionScores) ? data.perQuestionScores : [],
+      createdAt: data.createdAt,
+      startedAt: data.startedAt,
+      finishedAt: data.finishedAt,
+      finished: data.finished === true,
+    };
+  };
+
   // ===================== START INTERVIEW =====================
   const handleStart = async () => {
-    if (started || finished || questions.length === 0) return; // THÊM: Không start nếu finished
+    if (started || finished || questions.length === 0) return;
+
+    const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
+    localStorage.setItem("guestUid", uid);
+
+    const existing = await findExistingInterview(uid);
+    if (existing) {
+      setInterviewId(existing.id!);
+      interviewDocRef.current = doc(db, "interviews", existing.id!);
+      setAnswers(existing.answers);
+      setCurrentQ(existing.answers.length);
+      setResult(existing.score ? {
+        score: existing.score,
+        feedback: existing.feedback,
+        perQuestionFeedback: existing.perQuestionFeedback,
+        suggestion: existing.suggestion,
+        perQuestionScores: existing.perQuestionScores,
+      } : null);
+      setFinished(existing.finished);
+      setStarted(true);
+      setIsResuming(true);
+
+      if (!existing.finished && existing.answers.length < questions.length) {
+        await runQuestionCycle(existing.answers.length);
+      }
+      return;
+    }
+
     const ok = await ensureMicPermission();
     if (!ok) return;
 
@@ -170,27 +252,63 @@ export default function Specialized2() {
     setLiveText("");
     hasPlayedQuestion.current = false;
 
-    const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
-    localStorage.setItem("guestUid", uid);
-
     try {
       const docRef = await addDoc(collection(db, "interviews"), {
-        userId: uid, category, level, role, questions, answers: [], score: null,
-        createdAt: serverTimestamp(), startedAt: serverTimestamp(), finished: false,
+        userId: uid,
+        category,
+        level,
+        role,
+        questions,
+        answers: [],
+        score: null,
+        feedback: "",
+        perQuestionFeedback: [],
+        suggestion: "",
+        perQuestionScores: [],
+        createdAt: serverTimestamp(),
+        startedAt: serverTimestamp(),
+        finished: false,
       });
       interviewDocRef.current = docRef;
-    } catch (err) { console.error(err); }
+      setInterviewId(docRef.id);
+    } catch (err) {
+      console.error("Failed to create interview:", err);
+    }
 
     await runQuestionCycle(0);
   };
 
-  // ===================== QUESTION CYCLE =====================
-  const runQuestionCycle = async (index: number) => {
-    if (finished) return; // THÊM: Không run nếu finished
-    if (index >= questions.length || finished) {
-      await finishInterview();
+  // ===================== RETRY SINGLE QUESTION =====================
+  const handleRetry = async (index: number) => {
+    if (isLoading || !finished) return;
+    setRetryQuestion(index);
+    setCurrentQ(index);
+    setStarted(true);
+    setFinished(false);
+    setRecording(false);
+    setLiveText("");
+    finalTranscriptRef.current = "";
+    hasPlayedQuestion.current = false;
+    setIsLoading(true);
+
+    micStream?.getTracks().forEach(t => t.stop());
+    clearInterval(timerRef.current);
+    recognitionRef.current?.stop();
+    mediaRecorderRef.current?.stop();
+
+    const ok = await ensureMicPermission();
+    if (!ok) {
+      setIsLoading(false);
       return;
     }
+
+    await runQuestionCycle(index);
+    setIsLoading(false);
+  };
+
+  // ===================== QUESTION CYCLE =====================
+  const runQuestionCycle = async (index: number) => {
+    if ((finished && retryQuestion === null) || index >= questions.length) return;
 
     setCurrentQ(index);
     setCountdown(60);
@@ -199,7 +317,7 @@ export default function Specialized2() {
     setLiveText("");
     hasPlayedQuestion.current = false;
 
-    if (!hasPlayedQuestion.current) {
+    if (!(finished && retryQuestion === null) && !hasPlayedQuestion.current) {
       await playQuestion(questions[index]);
       hasPlayedQuestion.current = true;
     }
@@ -218,12 +336,11 @@ export default function Specialized2() {
     lastSpokenAtRef.current = Date.now();
     recordingStartedAtRef.current = Date.now();
 
-    // Web Speech API priority
     if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
         const checkSilence = () => {
-          if (!recording) return;
+          if (!recording || (finished && retryQuestion === null)) return;
           const now = Date.now();
           if (now - lastSpokenAtRef.current > silenceTimeout && now - recordingStartedAtRef.current > minRecordingDuration) {
             stopRecording();
@@ -236,7 +353,6 @@ export default function Specialized2() {
       } catch {}
     }
 
-    // Fallback MediaRecorder
     const recorder = new MediaRecorder(micStream!, { mimeType: "audio/webm;codecs=opus" });
     mediaRecorderRef.current = recorder;
     recorder.ondataavailable = e => e.data.size > 0 && audioChunksRef.current.push(e.data);
@@ -255,7 +371,7 @@ export default function Specialized2() {
 
     const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
     const monitor = () => {
-      if (!monitoring || !recording) return;
+      if (!monitoring || !recording || (finished && retryQuestion === null)) return;
       analyserNode.getByteTimeDomainData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) sum += Math.pow((dataArray[i] - 128) / 128, 2);
@@ -278,16 +394,12 @@ export default function Specialized2() {
     if (!recording) return;
     setRecording(false);
     clearInterval(timerRef.current);
-
     if (recognitionRef.current) recognitionRef.current.stop();
-
     if (finalTranscriptRef.current.trim()) {
       await saveAndNext(finalTranscriptRef.current.trim());
       return;
     }
-
     if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
-
     setTimeout(() => {
       if (audioChunksRef.current.length > 0) {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
@@ -316,12 +428,23 @@ export default function Specialized2() {
 
   // ===================== SAVE & NEXT =====================
   const saveAndNext = async (text: string) => {
-    if (finished || currentQ >= questions.length) {
+    if ((finished && retryQuestion === null) || currentQ >= questions.length) {
       await finishInterview();
       return;
     }
 
-    const nextAnswers = [...answers, text];
+    let nextAnswers = [...answers];
+    if (retryQuestion !== null) {
+      nextAnswers[retryQuestion] = text;
+      setAnswers(nextAnswers);
+      if (interviewDocRef.current) {
+        await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
+      }
+      await retryFinish();
+      return;
+    }
+
+    nextAnswers = [...answers, text];
     setAnswers(nextAnswers);
     if (interviewDocRef.current) {
       await updateDoc(interviewDocRef.current, { answers: nextAnswers, updatedAt: serverTimestamp() });
@@ -337,24 +460,29 @@ export default function Specialized2() {
     }
   };
 
-  // ===================== FINISH INTERVIEW (CHỐNG LẶP 100%) =====================
+  // ===================== FINISH INTERVIEW =====================
   const finishInterview = async () => {
-    if (finished) return; // <-- QUAN TRỌNG NHẤT
+    if (finished) return;
     setRecording(false);
     setStarted(false);
     setIsLoading(true);
     setFinished(true);
+    setRetryQuestion(null);
 
-    // Dừng mọi thứ ngay lập tức
     recognitionRef.current?.stop();
     mediaRecorderRef.current?.stop();
     clearInterval(timerRef.current);
     micStream?.getTracks().forEach(t => t.stop());
 
+    const finalAnswers = [...answers];
+    while (finalAnswers.length < questions.length) {
+      finalAnswers.push("(No answer recorded)");
+    }
+
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
-        body: JSON.stringify({ questions, answers }),
+        body: JSON.stringify({ questions, answers: finalAnswers }),
         headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) throw new Error("Eval failed");
@@ -363,6 +491,7 @@ export default function Specialized2() {
 
       if (interviewDocRef.current) {
         await updateDoc(interviewDocRef.current, {
+          answers: finalAnswers,
           score: data.score,
           feedback: data.feedback,
           perQuestionFeedback: data.perQuestionFeedback,
@@ -380,27 +509,84 @@ export default function Specialized2() {
         duration: 5000,
       });
     } catch (err) {
+      console.error(err);
       toast({ title: "Error", description: "Failed to evaluate.", status: "error" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ===================== HISTORY =====================
-  useEffect(() => {
-    const uid = auth.currentUser?.uid || localStorage.getItem("guestUid") || `guest-${Date.now()}`;
-    localStorage.setItem("guestUid", uid);
-    const q = firestoreQuery(collection(db, "interviews"), where("userId", "==", uid), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q, s => setHistoryRealtime(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => unsub();
-  }, []);
+  // ===================== RETRY FINISH =====================
+  const retryFinish = async () => {
+    setRecording(false);
+    setStarted(false);
+    setIsLoading(true);
+    setFinished(true);
+    setRetryQuestion(null);
 
+    recognitionRef.current?.stop();
+    mediaRecorderRef.current?.stop();
+    clearInterval(timerRef.current);
+    micStream?.getTracks().forEach(t => t.stop());
+
+    try {
+      const singleQ = [questions[currentQ]];
+      const singleA = [answers[currentQ]];
+      const res = await fetch("/api/evaluate", {
+        method: "POST",
+        body: JSON.stringify({ questions: singleQ, answers: singleA }),
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error("Eval failed");
+      const data = await res.json();
+
+      const newResult = { ...result };
+      newResult.perQuestionScores[currentQ] = data.perQuestionScores[0];
+      newResult.perQuestionFeedback[currentQ] = data.perQuestionFeedback[0];
+      newResult.suggestion = data.suggestion;
+      newResult.score = Math.round(newResult.perQuestionScores.reduce((a: number, b: number) => a + b, 0) / questions.length * 10) / 10;
+      newResult.feedback = `Overall: ${newResult.score}/10`;
+
+      setResult(newResult);
+
+      if (interviewDocRef.current) {
+        await updateDoc(interviewDocRef.current, {
+          answers,
+          score: newResult.score,
+          feedback: newResult.feedback,
+          perQuestionFeedback: newResult.perQuestionFeedback,
+          suggestion: newResult.suggestion,
+          perQuestionScores: newResult.perQuestionScores,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      toast({
+        title: "Retry Completed!",
+        description: "Your answer has been updated.",
+        status: "success",
+        duration: 5000,
+      });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Error", description: "Failed to evaluate retry.", status: "error" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ===================== CLEANUP =====================
   useEffect(() => {
     ensureMicPermission();
     return () => {
       clearInterval(timerRef.current);
       micStream?.getTracks().forEach(t => t.stop());
       recognitionRef.current?.stop();
+      mediaRecorderRef.current?.
+
+ stop();
+      audioContext?.close();
+      setMonitoring(false);
     };
   }, []);
 
@@ -424,7 +610,6 @@ export default function Specialized2() {
       </HStack>
 
       <Flex>
-        {/* LEFT - INTERVIEW */}
         <Box flex="3" borderRight="1px solid black" minH="70vh" position="relative">
           {isLoading && <Spinner size="xl" color="teal.400" position="absolute" top="20%" left="50%" transform="translateX(-50%)" zIndex={10} />}
 
@@ -434,7 +619,7 @@ export default function Specialized2() {
                 Question {Math.min(currentQ + 1, questions.length)} / {questions.length}
               </Text>
               <Text mt={2} fontSize="lg" textAlign="center">
-                {currentQ < questions.length ? questions[currentQ] : (finished ? "Interview Completed!" : "Evaluating your answers...")}
+                {currentQ < questions.length ? questions[currentQ] : (finished ? "Interview Completed!" : "Evaluating...")}
               </Text>
             </Box>
 
@@ -449,7 +634,6 @@ export default function Specialized2() {
             )}
           </VStack>
 
-          {/* BUTTONS */}
           <Flex justify="center" position="absolute" bottom="16" left="0" right="0" gap={6} px={8}>
             <Button
               size="lg"
@@ -468,7 +652,6 @@ export default function Specialized2() {
             )}
           </Flex>
 
-          {/* YOUR ANSWERS (AFTER FINISH) */}
           {finished && answers.length > 0 && (
             <Box position="absolute" bottom="0" left="0" right="0" bg="gray.50" borderTop="1px solid" borderColor="gray.300" p={6} maxH="50vh" overflowY="auto">
               <Text fontSize="xl" fontWeight="bold" mb={4} textAlign="center">Your Answers</Text>
@@ -484,7 +667,6 @@ export default function Specialized2() {
           )}
         </Box>
 
-        {/* RIGHT - RESULTS & SUGGESTIONS */}
         <Box flex="1" pl={6}>
           <Tabs variant="unstyled">
             <TabList borderBottom="1px solid black">
@@ -493,7 +675,6 @@ export default function Specialized2() {
             </TabList>
 
             <TabPanels mt={4}>
-              {/* RESULTS */}
               <TabPanel>
                 {result ? (
                   <Box>
@@ -519,37 +700,35 @@ export default function Specialized2() {
                 ) : (
                   <Text color="gray.500">Complete the interview to see results.</Text>
                 )}
-
-                {/* <Box mt={8}>
-                  <Text fontWeight="bold" fontSize="sm">Recent Interviews</Text>
-                  {historyRealtime.length === 0 ? (
-                    <Text fontSize="sm" color="gray.500" mt={2}>No history yet</Text>
-                  ) : (
-                    <VStack align="start" mt={2} spacing={2}>
-                      {historyRealtime.map(h => (
-                        <Box key={h.id} p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                          <Text fontSize="sm" fontWeight="semibold">{h.category} - {h.role || "Practice"}</Text>
-                          <Text fontSize="xs" color="gray.600">Score: {h.score || "—"} • {h.createdAt?.toDate?.()?.toLocaleDateString()}</Text>
-                        </Box>
-                      ))}
-                    </VStack>
-                  )}
-                </Box> */}
               </TabPanel>
 
-              {/* AI SUGGESTIONS */}
               <TabPanel>
                 {result ? (
                   <Box>
                     <Text fontSize="lg" fontWeight="bold" color={result.score >= 6 ? "green.500" : "red.500"} mb={3}>
-                      {result.score >= 6 ? "Great Job! You're Ready!" : "How to Score 6+ on Weak Questions"}
+                      {result.score >= 6 ? "Great Job!" : "Improved Answers for Each Question"}
                     </Text>
-                    <Text whiteSpace="pre-wrap" fontSize="sm" lineHeight="1.6">
-                      {result.suggestion || "No suggestions available."}
-                    </Text>
+                    <VStack align="start" spacing={4}>
+                      {result.suggestion.split('\n\n').map((sug: string, i: number) => (
+                        <Box key={i} p={4} bg="gray.50" borderRadius="lg" border="1px solid" borderColor="gray.200" w="full">
+                          <Text whiteSpace="pre-wrap" fontSize="sm" lineHeight="1.6">
+                            {sug}
+                          </Text>
+                          <Button
+                            mt={2}
+                            size="sm"
+                            colorScheme="teal"
+                            onClick={() => handleRetry(i)}
+                            isDisabled={isLoading}
+                          >
+                            Try Again This Question
+                          </Button>
+                        </Box>
+                      ))}
+                    </VStack>
                   </Box>
                 ) : (
-                  <Text color="gray.500">Finish the interview to get personalized AI suggestions.</Text>
+                  <Text color="gray.500">Finish to get AI suggestions.</Text>
                 )}
               </TabPanel>
             </TabPanels>
