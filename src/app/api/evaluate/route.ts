@@ -36,6 +36,7 @@ export async function POST(req: Request) {
         const text = await result.response.text();
         const jsonStr = text.replace(/```json|```/g, "").trim();
         let json;
+        
         try {
           json = JSON.parse(jsonStr);
         } catch {
