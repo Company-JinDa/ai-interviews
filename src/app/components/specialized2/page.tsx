@@ -636,7 +636,7 @@ export default function Specialized2() {
           <Flex justify="center" position="absolute" bottom="16" left="0" right="0" gap={6} px={8}>
             <Button
               size="lg"
-              colorScheme={started || finished ? "gray" : "teal"}
+              colorScheme={started  || finished ? "gray" : "teal"}
               borderRadius="full"
               px={12} py={7} fontSize="xl"
               onClick={handleStart}
