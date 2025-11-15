@@ -80,4 +80,5 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Server error" }), { status: 500 });
   }
 }
+
 export const dynamic = "force-dynamic";
