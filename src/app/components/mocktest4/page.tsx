@@ -30,8 +30,6 @@ export default function MockTestView() {
         /logo.png
         <Text fontSize="lg" fontWeight="semibold">AI Interviews</Text>
       </Flex>
-
-      {/* Title */}
       <Text fontSize="xl" fontWeight="bold" textAlign="center" mb={8}>
         Receive random questions from companies
       </Text>
