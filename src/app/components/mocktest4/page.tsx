@@ -1,35 +1,43 @@
 // src/app/mocktest4/page.tsx
 "use client";
 
-import { Box, Flex, Text, Button, VStack, HStack, Divider } from "@chakra-ui/react";
+import {
+  Box,
+  Flex,
+  Text,
+  Button,
+  VStack,
+  HStack,
+  Divider,
+  Image,
+  Center,
+} from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function MockTest4() {
   const router = useRouter();
 
-  // State chọn Level (chỉ được chọn 1)
+  // State chọn Level & Role (chỉ được chọn 1)
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
-
-  // State chọn Role (chỉ được chọn 1)
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
   // Danh sách Level
   const levels = ["Intern", "Fresher", "Junior", "Middle", "Senior"];
 
-  // Danh sách Role (giống hệt ảnh)
+  // Danh sách Role - đúng 100% theo ảnh Figma
   const roles = [
     ["Back-End", "Full-stack", "Cyber security", "DevOps"],
     ["Front-End", "Mobile", "Cloud Computing", "UX/UI Design"],
     ["AI Engineer", "Database Administration", "Data Science", "Analytics"],
   ];
 
-  // Xử lý nhấn Level
+  // Xử lý chọn Level
   const handleLevelClick = (level: string) => {
     setSelectedLevel(level);
   };
 
-  // Xử lý nhấn Role
+  // Xử lý chọn Role
   const handleRoleClick = (role: string) => {
     setSelectedRole(role);
   };
@@ -37,70 +45,104 @@ export default function MockTest4() {
   // Xử lý nút Let's Go
   const handleLetsGo = () => {
     if (!selectedLevel || !selectedRole) {
-      alert("Please select both Level and Role!");
+      alert("Please select your Level and Role first!");
       return;
     }
-    // Chuyển sang mocktest5 với params
-    router.push(`/mocktest5?level=${encodeURIComponent(selectedLevel)}&role=${encodeURIComponent(selectedRole)}`);
+
+    router.push(
+      `/mocktest5?level=${encodeURIComponent(selectedLevel)}&role=${encodeURIComponent(
+        selectedRole
+      )}`
+    );
   };
 
   return (
     <Box minH="100vh" bg="#f8fcff" position="relative">
-      {/* Header */}
-      <Box bg="#e6f3ff" py={4} px={8} borderBottom="1px solid #ccc">
-        <Text fontSize="sm" color="gray.600" fontWeight="medium">
-          AI - Interviews
+      {/* Header với Logo + Tên */}
+      <Flex
+        align="center"
+        justify="flex-start"
+        px={8}
+        py={6}
+        borderBottom="1px solid #ddd"
+        bg="white"
+      >
+        <Image
+          src="/logo.png"
+          alt="AI-Interview Logo"
+          boxSize="50px"
+          borderRadius="full"
+          mr={3}
+          fallbackSrc="https://via.placeholder.com/50?text=AI"
+        />
+        <Text fontSize="2xl" fontWeight="extrabold" color="teal.600">
+          AI-Interview
         </Text>
-      </Box>
+      </Flex>
 
-      <VStack spacing={10} mt={10} px={6}>
-        {/* Tiêu đề */}
-        <Text fontSize="3xl" fontWeight="extrabold" color="gray.800">
+      <VStack spacing={12} mt={10} px={6} maxW="1200px" mx="auto">
+        {/* Tiêu đề chính */}
+        <Text
+          fontSize={{ base: "2xl", md: "4xl" }}
+          fontWeight="extrabold"
+          color="gray.800"
+          textAlign="center"
+          lineHeight="1.2"
+        >
           Receive random questions from companies
         </Text>
 
-        {/* LEVELS - Hình vuông bo góc */}
-        <HStack spacing={6}>
-          {levels.map((level) => (
-            <Button
-              key={level}
-              w="120px"
-              h="60px"
-              bg={selectedLevel === level ? "teal.400" : "#b3e0ff"}
-              color={selectedLevel === level ? "white" : "gray.800"}
-              fontWeight="bold"
-              borderRadius="lg"
-              boxShadow="md"
-              _hover={{ bg: selectedLevel === level ? "teal.500" : "#99d6ff" }}
-              transition="all 0.2s"
-              onClick={() => handleLevelClick(level)}
-            >
-              {level}
-            </Button>
-          ))}
-        </HStack>
+        {/* LEVELS - Nút vuông bo góc */}
+        <Center>
+          <HStack spacing={{ base: 3, md: 6 }} flexWrap="wrap" justify="center">
+            {levels.map((level) => (
+              <Button
+                key={level}
+                w={{ base: "100px", md: "130px" }}
+                h="70px"
+                bg={selectedLevel === level ? "teal.500" : "#b3e5fc"}
+                color={selectedLevel === level ? "white" : "gray.800"}
+                fontWeight="bold"
+                fontSize={{ base: "sm", md: "lg" }}
+                borderRadius="lg"
+                boxShadow="md"
+                _hover={{
+                  bg: selectedLevel === level ? "teal.600" : "#81d4fa",
+                  transform: "translateY(-2px)",
+                }}
+                transition="all 0.2s"
+                onClick={() => handleLevelClick(level)}
+              >
+                {level}
+              </Button>
+            ))}
+          </HStack>
+        </Center>
 
-        {/* Divider */}
-        <Divider borderColor="gray.300" w="90%" />
+        {/* Đường kẻ ngang */}
+        <Divider borderColor="gray.300" w="90%" maxW="1000px" />
 
-        {/* ROLES - Hình oval (pill) */}
-        <VStack spacing={6} align="center">
-          {roles.map((row, rowIndex) => (
-            <HStack key={rowIndex} spacing={8}>
+        {/* ROLES - Nút hình oval (pill) */}
+        <VStack spacing={6} align="center" w="full">
+          {roles.map((row, idx) => (
+            <HStack key={idx} spacing={{ base: 4, md: 8 }} flexWrap="wrap" justify="center">
               {row.map((role) => (
                 <Button
                   key={role}
-                  px={8}
+                  px={{ base: 6, md: 8 }}
                   py={5}
-                  bg={selectedRole === role ? "teal.400" : "#a1d4ff"}
+                  minW={{ base: "160px", md: "200px" }}
+                  bg={selectedRole === role ? "teal.500" : "#81d4fa"}
                   color={selectedRole === role ? "white" : "gray.800"}
                   fontWeight="bold"
+                  fontSize="lg"
                   borderRadius="full"
                   boxShadow="lg"
-                  _hover={{ bg: selectedRole === role ? "teal.500" : "#85c8ff" }}
+                  _hover={{
+                    bg: selectedRole === role ? "teal.600" : "#4fc3f7",
+                    transform: "translateY(-3px)",
+                  }}
                   transition="all 0.3s"
-                  fontSize="lg"
-                  minW="180px"
                   onClick={() => handleRoleClick(role)}
                 >
                   {role}
@@ -110,40 +152,45 @@ export default function MockTest4() {
           ))}
         </VStack>
 
-        {/* Divider */}
-        <Divider borderColor="gray.300" w="90%" mt={10} />
+        {/* Đường kẻ ngang thứ 2 */}
+        <Divider borderColor="gray.300" w="90%" maxW="1000px" mt={8} />
 
-        {/* Nút Let's Go - Giống hệt ảnh */}
+        {/* Nút Let's Go - To đùng, đẹp như Figma */}
         <Box mt={12}>
           <Button
             onClick={handleLetsGo}
-            bg="#6ccbff"
+            bg="#4fc3f7"
             color="gray.900"
-            fontSize="3xl"
+            fontSize={{ base: "3xl", md: "5xl" }}
             fontWeight="extrabold"
-            px={16}
-            py={10}
-            borderRadius="2xl"
-            boxShadow="2xl"
-            _hover={{ bg: "#4fb8ff", transform: "translateY(-4px)" }}
+            px={{ base: 12, md: 20 }}
+            py={{ base: 10, md: 12 }}
+            borderRadius="3xl"
+            boxShadow="0 20px 40px rgba(79, 195, 247, 0.4)"
+            _hover={{
+              bg: "#29b6f6",
+              transform: "translateY(-6px)",
+              boxShadow: "0 25px 50px rgba(79, 195, 247, 0.5)",
+            }}
             _active={{ transform: "translateY(2px)" }}
             transition="all 0.3s"
             isDisabled={!selectedLevel || !selectedRole}
-            opacity={!selectedLevel || !selectedRole ? 0.6 : 1}
+            opacity={!selectedLevel || !selectedRole ? 0.5 : 1}
+            cursor={!selectedLevel || !selectedRole ? "not-allowed" : "pointer"}
           >
             Let&apos;go
           </Button>
         </Box>
       </VStack>
 
-      {/* Background nhẹ giống ảnh */}
+      {/* Background gradient nhẹ dưới cùng */}
       <Box
         position="absolute"
         bottom={0}
         left={0}
         right={0}
-        h="200px"
-        bgGradient="linear(to-t, #e6f7ff, transparent)"
+        h="300px"
+        bgGradient="linear(to-t, #e1f5fe, transparent)"
         pointerEvents="none"
         zIndex={-1}
       />
