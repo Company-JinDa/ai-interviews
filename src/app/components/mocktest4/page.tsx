@@ -18,7 +18,7 @@ import { useState } from "react";
 export default function MockTest4() {
   const router = useRouter();
 
-  // State chọn Level & Role (chỉ được chọn 1)
+  // State chọn Level & Role
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
 
@@ -33,39 +33,39 @@ export default function MockTest4() {
   ];
 
   // Xử lý chọn Level
-  const handleLevelClick = (level: string) => {
-    setSelectedLevel(level);
-  };
+  const handleLevelClick = (level: string) => setSelectedLevel(level);
 
   // Xử lý chọn Role
-  const handleRoleClick = (role: string) => {
-    setSelectedRole(role);
-  };
+  const handleRoleClick = (role: string) => setSelectedRole(role);
 
-  // Xử lý nút Let's Go
+  // Bấm vào Logo hoặc tên → về Dashboard
+  const goToDashboard = () => router.push("/auth/dashboard"); // hoặc "/" nếu bạn dùng trang chủ
+
+  // Nút Let's Go
   const handleLetsGo = () => {
     if (!selectedLevel || !selectedRole) {
       alert("Please select your Level and Role first!");
       return;
     }
-
     router.push(
-      `/mocktest5?level=${encodeURIComponent(selectedLevel)}&role=${encodeURIComponent(
-        selectedRole
-      )}`
+      `/mocktest5?level=${encodeURIComponent(selectedLevel)}&role=${encodeURIComponent(selectedRole)}`
     );
   };
 
   return (
     <Box minH="100vh" bg="#f8fcff" position="relative">
-      {/* Header với Logo + Tên */}
+      {/* HEADER – BẤM ĐƯỢC VỀ DASHBOARD */}
       <Flex
         align="center"
         justify="flex-start"
-        px={8}
+        px={{ base: 4, md: 8 }}
         py={6}
         borderBottom="1px solid #ddd"
         bg="white"
+        cursor="pointer"
+        _hover={{ bg: "gray.50" }}
+        transition="background 0.2s"
+        onClick={goToDashboard}
       >
         <Image
           src="/logo.png"
@@ -81,7 +81,7 @@ export default function MockTest4() {
       </Flex>
 
       <VStack spacing={12} mt={10} px={6} maxW="1200px" mx="auto">
-        {/* Tiêu đề chính */}
+        {/* Tiêu đề */}
         <Text
           fontSize={{ base: "2xl", md: "4xl" }}
           fontWeight="extrabold"
@@ -92,7 +92,7 @@ export default function MockTest4() {
           Receive random questions from companies
         </Text>
 
-        {/* LEVELS - Nút vuông bo góc */}
+        {/* LEVELS */}
         <Center>
           <HStack spacing={{ base: 3, md: 6 }} flexWrap="wrap" justify="center">
             {levels.map((level) => (
@@ -119,10 +119,9 @@ export default function MockTest4() {
           </HStack>
         </Center>
 
-        {/* Đường kẻ ngang */}
         <Divider borderColor="gray.300" w="90%" maxW="1000px" />
 
-        {/* ROLES - Nút hình oval (pill) */}
+        {/* ROLES */}
         <VStack spacing={6} align="center" w="full">
           {roles.map((row, idx) => (
             <HStack key={idx} spacing={{ base: 4, md: 8 }} flexWrap="wrap" justify="center">
@@ -152,10 +151,9 @@ export default function MockTest4() {
           ))}
         </VStack>
 
-        {/* Đường kẻ ngang thứ 2 */}
         <Divider borderColor="gray.300" w="90%" maxW="1000px" mt={8} />
 
-        {/* Nút Let's Go - To đùng, đẹp như Figma */}
+        {/* NÚT LET'S GO */}
         <Box mt={12}>
           <Button
             onClick={handleLetsGo}
@@ -183,7 +181,7 @@ export default function MockTest4() {
         </Box>
       </VStack>
 
-      {/* Background gradient nhẹ dưới cùng */}
+      {/* Background gradient */}
       <Box
         position="absolute"
         bottom={0}
