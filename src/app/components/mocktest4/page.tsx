@@ -31,15 +31,13 @@ export default function MockTest4() {
     ["Front-End", "Mobile", "Cloud Computing", "UX/UI Design"],
     ["AI Engineer", "Database Administration", "Data Science", "Analytics"],
   ];
-
-  // Xử lý chọn Level
   const handleLevelClick = (level: string) => setSelectedLevel(level);
 
   // Xử lý chọn Role
   const handleRoleClick = (role: string) => setSelectedRole(role);
 
   // Bấm vào Logo hoặc tên → về Dashboard
-  const goToDashboard = () => router.push("/auth/dashboard"); // hoặc "/" nếu bạn dùng trang chủ
+  const goToDashboard = () => router.push("/auth/dashboard"); 
 
   // Nút Let's Go
   const handleLetsGo = () => {
