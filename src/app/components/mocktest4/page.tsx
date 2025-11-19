@@ -64,7 +64,7 @@ export default function MockTest4() {
       questions: JSON.stringify(questions),
     });
 
-    router.push(`/mocktest5?${params.toString()}`);
+    router.push(`/mocktestinspect?${params.toString()}`);
   };
 
   return (
