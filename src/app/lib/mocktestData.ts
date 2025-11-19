@@ -1,4 +1,4 @@
-// lib/mocktestData.ts đều được
+// lib/mocktestData.ts 
 
 export const mocktestSets = [
   { level: "Intern", role: "Front-End", questions: ["What is HTML?", "Explain semantic tags", "Block vs Inline elements?", "What is CSS?", "How to include JS?"] },
@@ -20,3 +20,12 @@ export const mocktestSets = [
   { level: "Senior", role: "DevOps", questions: ["Kubernetes concepts?", "Blue-green deployment?", "Infrastructure as Code?", "Observability?"] },
   { level: "Senior", role: "Cyber security", questions: ["OWASP Top 10?", "SQL Injection prevention?", "XSS, CSRF?", "Zero Trust?"] },
 ];
+
+// Helper để tìm bộ câu hỏi theo level + role
+export function getQuestionsByLevelAndRole(level: string, role: string): string[] | null {
+  const normalizedRole = role.trim();
+  const set = mocktestSets.find(
+    (s) => s.level === level && s.role === normalizedRole
+  );
+  return set ? set.questions : null;
+}

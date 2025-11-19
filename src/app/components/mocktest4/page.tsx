@@ -14,6 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getQuestionsByLevelAndRole } from "@/app/lib/mocktestData"; // điều chỉnh đường dẫn nếu cần
 
 export default function MockTest4() {
   const router = useRouter();
@@ -25,34 +26,50 @@ export default function MockTest4() {
   // Danh sách Level
   const levels = ["Intern", "Fresher", "Junior", "Middle", "Senior"];
 
-  // Danh sách Role - đúng 100% theo ảnh Figma
+  // Danh sách Role - đúng 100% theo Figma
   const roles = [
     ["Back-End", "Full-stack", "Cyber security", "DevOps"],
     ["Front-End", "Mobile", "Cloud Computing", "UX/UI Design"],
     ["AI Engineer", "Database Administration", "Data Science", "Analytics"],
   ];
-  const handleLevelClick = (level: string) => setSelectedLevel(level);
 
-  // Xử lý chọn Role
-  const handleRoleClick = (role: string) => setSelectedRole(role);
+  const handleLevelClick = (level: string) => {
+    setSelectedLevel(level);
+  };
 
-  // Bấm vào Logo hoặc tên → về Dashboard
-  const goToDashboard = () => router.push("/auth/dashboard"); 
+  const handleRoleClick = (role: string) => {
+    setSelectedRole(role);
+  };
 
-  // Nút Let's Go
+  // Click logo → về dashboard
+  const goToDashboard = () => router.push("/auth/dashboard");
+
+  // Nút Let's Go - truyền luôn câu hỏi qua query
   const handleLetsGo = () => {
     if (!selectedLevel || !selectedRole) {
       alert("Please select your Level and Role first!");
       return;
     }
-    router.push(
-      `/mocktest5?level=${encodeURIComponent(selectedLevel)}&role=${encodeURIComponent(selectedRole)}`
-    );
+
+    const questions = getQuestionsByLevelAndRole(selectedLevel, selectedRole);
+
+    if (!questions || questions.length === 0) {
+      alert("Không tìm thấy bộ câu hỏi cho vị trí này! Hãy báo admin nhé");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      level: selectedLevel,
+      role: selectedRole,
+      questions: JSON.stringify(questions),
+    });
+
+    router.push(`/mocktest5?${params.toString()}`);
   };
 
   return (
     <Box minH="100vh" bg="#f8fcff" position="relative">
-      {/* HEADER – BẤM ĐƯỢC VỀ DASHBOARD */}
+      {/* HEADER – Click về Dashboard */}
       <Flex
         align="center"
         justify="flex-start"
@@ -179,7 +196,7 @@ export default function MockTest4() {
         </Box>
       </VStack>
 
-      {/* Background gradient */}
+      {/* Background gradient nhẹ */}
       <Box
         position="absolute"
         bottom={0}
