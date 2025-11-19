@@ -4,11 +4,7 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore"
 import { questionsIT } from "./questionsIT"
 import { questionsEnglish } from "./questionsEnglish"
 
-/**
- * Upload all questions into a single collection "questions".
- * Document id = `${category}_${level}_${role}` (spaces replaced by underscores)
- * Use setDoc so re-running will overwrite/update documents.
- */
+
 export async function uploadQuestions() {
   const all = [...questionsIT, ...questionsEnglish]
 

@@ -1,4 +1,4 @@
-// data/mocktestData.ts   (hoặc lib/mocktestData.ts đều được)
+// lib/mocktestData.ts đều được
 
 export const mocktestSets = [
   { level: "Intern", role: "Front-End", questions: ["What is HTML?", "Explain semantic tags", "Block vs Inline elements?", "What is CSS?", "How to include JS?"] },
