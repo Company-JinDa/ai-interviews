@@ -1,8 +1,7 @@
 // lib/uploadMocktestData.ts
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
 
-// Thay bằng config Firebase của bạn
 const firebaseConfig = {
   apiKey: "AIzaSyCaWIB51m3m8Sv0u_jtvXEd41c064FhYak",
   authDomain: "ai-interview-5863c.firebaseapp.com",
@@ -11,7 +10,7 @@ const firebaseConfig = {
   messagingSenderId: "1077521349218",
   appId: "1:1077521349218:web:535a301576444405adaf3b",
   measurementId: "G-WEKJFC9Z58",
-}
+};
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -35,11 +34,10 @@ const mocktestData = [
   { level: "Senior", role: "Back-End", questions: ["Design URL shortener?", "Microservices patterns?", "Eventual consistency?", "CQRS + Event Sourcing?"] },
   { level: "Senior", role: "DevOps", questions: ["Kubernetes concepts?", "Blue-green deployment?", "Infrastructure as Code?", "Observability?"] },
   { level: "Senior", role: "Cyber security", questions: ["OWASP Top 10?", "SQL Injection prevention?", "XSS, CSRF?", "Zero Trust?"] },
-
-  // Thêm bao nhiêu cũng được...
 ];
 
 async function upload() {
+  console.log("Bắt đầu upload dữ liệu...");
   for (const item of mocktestData) {
     const id = `${item.level}_${item.role.replace(/ /g, "_")}`;
     await setDoc(doc(db, "mocktestData", id), {
@@ -53,4 +51,7 @@ async function upload() {
   console.log("HOÀN TẤT! ĐÃ UPLOAD", mocktestData.length, "bộ câu hỏi lên Firestore");
 }
 
-upload().catch(err => console.error("Lỗi:", err));
+upload().catch(err => {
+  console.error("LỖI KẾT NỐI FIREBASE:", err.message);
+  console.error("Kiểm tra lại firebaseConfig và kết nối mạng!");
+});
