@@ -1,21 +1,6 @@
-// lib/uploadMocktestData.ts
-import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
+// data/mocktestData.ts   (hoặc lib/mocktestData.ts đều được)
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCaWIB51m3m8Sv0u_jtvXEd41c064FhYak",
-  authDomain: "ai-interview-5863c.firebaseapp.com",
-  projectId: "ai-interview-5863c",
-  storageBucket: "ai-interview-5863c.firebasestorage.app",
-  messagingSenderId: "1077521349218",
-  appId: "1:1077521349218:web:535a301576444405adaf3b",
-  measurementId: "G-WEKJFC9Z58",
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-const mocktestData = [
+export const mocktestSets = [
   { level: "Intern", role: "Front-End", questions: ["What is HTML?", "Explain semantic tags", "Block vs Inline elements?", "What is CSS?", "How to include JS?"] },
   { level: "Intern", role: "Back-End", questions: ["What is an API?", "HTTP methods?", "What is JSON?", "Client vs Server?", "What is a database?"] },
   { level: "Intern", role: "Full-stack", questions: ["What is MERN?", "Frontend vs Backend?", "What is REST?", "Git basics?", "Deploy a web app?"] },
@@ -35,23 +20,3 @@ const mocktestData = [
   { level: "Senior", role: "DevOps", questions: ["Kubernetes concepts?", "Blue-green deployment?", "Infrastructure as Code?", "Observability?"] },
   { level: "Senior", role: "Cyber security", questions: ["OWASP Top 10?", "SQL Injection prevention?", "XSS, CSRF?", "Zero Trust?"] },
 ];
-
-async function upload() {
-  console.log("Bắt đầu upload dữ liệu...");
-  for (const item of mocktestData) {
-    const id = `${item.level}_${item.role.replace(/ /g, "_")}`;
-    await setDoc(doc(db, "mocktestData", id), {
-      level: item.level,
-      role: item.role,
-      questions: item.questions,
-      uploadedAt: new Date(),
-    });
-    console.log("Uploaded:", id);
-  }
-  console.log("HOÀN TẤT! ĐÃ UPLOAD", mocktestData.length, "bộ câu hỏi lên Firestore");
-}
-
-upload().catch(err => {
-  console.error("LỖI KẾT NỐI FIREBASE:", err.message);
-  console.error("Kiểm tra lại firebaseConfig và kết nối mạng!");
-});
