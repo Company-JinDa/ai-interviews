@@ -1,43 +1,16 @@
-// src/app/mocktestinspect/page.tsx   ← ĐẶT ĐÚNG ĐƯỜNG DẪN NÀY NHÉ!
+// src/app/mocktestinspect/page.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Box,
-  Flex,
-  Text,
-  Button,
-  VStack,
-  HStack,
-  Circle,
-  Tabs,
-  TabList,
-  Tab,
-  TabPanels,
-  TabPanel,
-  Center,
-  Spinner,
-  useToast,
-  Image,
-  Badge,
+  Box, Flex, Text, Button, VStack, HStack, Circle, Tabs, TabList, Tab, TabPanels, TabPanel,
+  Center, Spinner, useToast, Image, Badge, Progress, Alert, AlertIcon
 } from "@chakra-ui/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { FaMicrophone, FaCamera, FaRedo } from "react-icons/fa";
+import { FaMicrophone, FaCamera } from "react-icons/fa";
 import { db, auth } from "@/app/lib/firebase";
-import {
-  addDoc,
-  collection,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-
-// Khai báo face-api từ CDN
-declare global {
-  interface Window {
-    faceapi: any;
-    webkitSpeechRecognition: any;
-  }
-}
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import * as faceapi from "@vladmandic/face-api";
 
 export default function MockTestInspect() {
   const router = useRouter();
@@ -48,99 +21,80 @@ export default function MockTestInspect() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  const level = searchParams.get("level") || "Unknown";
-  const role = searchParams.get("role") || "Unknown";
+  const level = searchParams.get("level") || "Intern";
+  const role = searchParams.get("role") || "Front-End";
   const questionsJson = searchParams.get("questions") || "[]";
 
   const [questions, setQuestions] = useState<string[]>([]);
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
-  const [recording, setRecording] = useState(false);
+  const [emotionLog, setEmotionLog] = useState<string[]>([]); // Lưu cảm xúc từng câu
   const [cameraReady, setCameraReady] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [started, setStarted] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [finished, setFinished] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [emotion, setEmotion] = useState("Detecting...");
+  const [currentEmotion, setCurrentEmotion] = useState("Detecting...");
+  const [emotionPercent, setEmotionPercent] = useState<any>({});
+  const [loadingModels, setLoadingModels] = useState(true);
 
-  // TỰ ĐỘNG TẢI face-api.js + models từ CDN → KHÔNG CẦN CÀI GÌ HẾT
+  // LOAD MODELS
   useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api.js@1.7.10/dist/face-api.min.js";
-    script.async = true;
-    script.onload = async () => {
-      console.log("face-api.js loaded");
-      const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api.js@1.7.10/weights";
-      await window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      await window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      await window.faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
-      console.log("Models loaded – Face Analysis Ready!");
+    const load = async () => {
+      await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+      await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
+      await faceapi.nets.faceExpressionNet.loadFromUri("/models");
+      setLoadingModels(false);
+      toast({ title: "AI đã sẵn sàng!", status: "success" });
     };
-    document.body.appendChild(script);
+    load();
   }, []);
 
-  // Parse questions
   useEffect(() => {
-    try {
-      const q = JSON.parse(questionsJson);
-      if (q.length === 0) router.push("/mocktest4");
-      setQuestions(q);
-    } catch {
-      router.push("/mocktest4");
-    }
+    try { setQuestions(JSON.parse(questionsJson)); }
+    catch { router.push("/"); }
   }, [questionsJson, router]);
 
-  // Bật camera + Face Detection realtime
+  // BẬT CAMERA + DETECT REALTIME + % CẢM XÚC
   const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-        setCameraReady(true);
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play();
+      setCameraReady(true);
 
-        const detectFace = async () => {
-          if (!videoRef.current || !canvasRef.current || finished) return;
+      const detect = async () => {
+        if (!videoRef.current || !canvasRef.current || finished) return;
+        const detections = await faceapi.detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks().withFaceExpressions();
 
-          const detections = await window.faceapi
-            .detectAllFaces(videoRef.current, new window.faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks()
-            .withFaceExpressions();
+        const ctx = canvasRef.current.getContext("2d")!;
+        ctx.clearRect(0, 0, 640, 480);
 
-          const ctx = canvasRef.current.getContext("2d")!;
-          ctx.clearRect(0, 0, 640, 480);
+        if (detections.length > 0) {
+          const resized = faceapi.resizeResults(detections, { width: 640, height: 480 });
+          faceapi.draw.drawDetections(canvasRef.current, resized);
+          faceapi.draw.drawFaceLandmarks(canvasRef.current, resized);
 
-          if (detections.length > 0) {
-            const resized = window.faceapi.resizeResults(detections, { width: 640, height: 480 });
-            window.faceapi.draw.drawDetections(canvasRef.current, resized);
-            window.faceapi.draw.drawFaceLandmarks(canvasRef.current, resized);
+          const expr = detections[0].expressions;
+          const dominant = Object.keys(expr).reduce((a, b) => (expr as any)[a] > (expr as any)[b] ? a : b);
+          const percent = Math.round((expr as any)[dominant] * 100);
 
-            const expr = detections[0].expressions;
-            const dominant = Object.keys(expr).reduce((a: any, b: any) =>
-              expr[a] > expr[b] ? a : b
-            );
-            setEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
-            setFaceDetected(true);
-          } else {
-            setEmotion("No face");
-            setFaceDetected(false);
-          }
-          requestAnimationFrame(detectFace);
-        };
-        detectFace();
-      }
-    } catch (err) {
-      toast({
-        title: "Camera & Mic Required!",
-        description: "Vui lòng bật camera và micro để tiếp tục",
-        status: "error",
-        duration: null,
-        isClosable: false,
-      });
+          setCurrentEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
+          setEmotionPercent(expr);
+          setFaceDetected(true);
+        } else {
+          setFaceDetected(false);
+          setCurrentEmotion("Không thấy khuôn mặt");
+        }
+        requestAnimationFrame(detect);
+      };
+      detect();
     }
   };
 
-  // TTS đọc câu hỏi
+  // TTS ĐỌC CÂU HỎI
   const speak = async (text: string) => {
     const res = await fetch("/api/tts", {
       method: "POST",
@@ -154,66 +108,45 @@ export default function MockTestInspect() {
     }
   };
 
-  // Bắt đầu phỏng vấn
+  // BẮT ĐẦU PHỎNG VẤN
   const handleStart = async () => {
-    if (!faceDetected) {
-      toast({ title: "Hãy nhìn vào camera!", status: "warning" });
-      return;
-    }
-
-    const uid = auth.currentUser?.uid || `guest-${Date.now()}`;
-    localStorage.setItem("guestUid", uid);
-
-    const docRef = await addDoc(collection(db, "interviews"), {
-      userId: uid,
-      level,
-      role,
-      questions,
-      answers: [],
-      finished: false,
-      createdAt: serverTimestamp(),
-    });
-
+    if (!faceDetected) return toast({ title: "Hãy nhìn vào camera!", status: "warning" });
     setStarted(true);
     await speak(questions[0]);
     startRecording();
   };
 
-  // Ghi âm + STT tự động next
+  // STT + TỰ ĐỘNG NEXT
   const startRecording = () => {
     setRecording(true);
-    if ("webkitSpeechRecognition" in window) {
-      const recognition = new window.webkitSpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
+    const recognition = new (window as any).webkitSpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
 
-      let finalTranscript = "";
-
-      recognition.onresult = (e: any) => {
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            finalTranscript += e.results[i][0].transcript + " ";
-          }
-        }
-        if (finalTranscript.trim()) {
-          recognition.stop();
-          nextQuestion(finalTranscript.trim());
-        }
-      };
-
-      recognition.onerror = () => recognition.start();
-      recognition.start();
-      recognitionRef.current = recognition;
-    }
+    let final = "";
+    recognition.onresult = (e: any) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
+      }
+      if (final.length > 10) {
+        recognition.stop();
+        nextQuestion(final.trim());
+      }
+    };
+    recognition.onerror = () => recognition.start();
+    recognition.start();
+    recognitionRef.current = recognition;
   };
 
+  // NEXT CÂU HỎI + LƯU CẢM XÚC
   const nextQuestion = async (answer: string) => {
     const newAnswers = [...answers, answer];
+    const newLog = [...emotionLog, currentEmotion];
     setAnswers(newAnswers);
+    setEmotionLog(newLog);
 
     if (currentQ + 1 >= questions.length) {
-      await finishInterview(newAnswers);
+      finishInterview(newAnswers, newLog);
       return;
     }
 
@@ -221,133 +154,105 @@ export default function MockTestInspect() {
     setTimeout(() => speak(questions[currentQ + 1]), 1500);
   };
 
-  const finishInterview = async (finalAnswers: string[]) => {
+  // HOÀN THÀNH + EVALUATE + LƯU FIREBASE
+  const finishInterview = async (finalAnswers: string[], finalEmotions: string[]) => {
     setRecording(false);
     setFinished(true);
 
     const res = await fetch("/api/evaluate", {
       method: "POST",
-      body: JSON.stringify({ questions, answers: finalAnswers }),
+      body: JSON.stringify({ questions, answers: finalAnswers, emotions: finalEmotions }),
       headers: { "Content-Type": "application/json" },
     });
     const data = await res.json();
     setResult(data);
 
-    // Confetti khi PASS (không cần cài package)
-    if (data.score >= 7) {
-      const confettiScript = document.createElement("script");
-      confettiScript.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js";
-      confettiScript.onload = () => {
-        // @ts-ignore
-        window.confetti({
-          particleCount: 200,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      };
-      document.body.appendChild(confettiScript);
-    }
+    // Lưu Firebase có cả cảm xúc từng câu
+    await addDoc(collection(db, "interviews"), {
+      userId: auth.currentUser?.uid || "guest",
+      level, role, questions, answers: finalAnswers,
+      emotions: finalEmotions,
+      result: data,
+      createdAt: serverTimestamp(),
+    });
 
-    // Lưu Firestore
-    // (code lưu giống file cũ của bạn)
+    // CONFETTI KHI PASS
+    if (data.score >= 7) {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js";
+      script.onload = () => (window as any).confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+      document.body.appendChild(script);
+    }
   };
 
-  if (questions.length === 0) return <Center minH="100vh"><Spinner size="xl" /></Center>;
+  if (loadingModels || questions.length === 0) return <Center minH="100vh"><Spinner size="xl" /><Text mt={4}>Đang tải AI...</Text></Center>;
 
   return (
     <Box minH="100vh" bg="gray.50">
-      {/* Header */}
       <Flex align="center" justify="space-between" p={6} bg="white" shadow="lg">
-        <HStack>
-          <Image src="/logo.png" boxSize="50px" borderRadius="full" fallbackSrc="https://via.placeholder.com/50" />
-          <Text fontSize="2xl" fontWeight="extrabold" color="teal.600">AI-Interview</Text>
-        </HStack>
-        <Badge colorScheme="teal" fontSize="lg" px={6} py={3} borderRadius="full">
-          {level} • {role}
-        </Badge>
+        <HStack><Image src="/logo.png" boxSize="50px" borderRadius="full" fallbackSrc="https://via.placeholder.com/50" /><Text fontSize="2xl" fontWeight="bold" color="teal.600">AI-Interview</Text></HStack>
+        <Badge colorScheme="teal" fontSize="lg" px={6} py={3}>{level} • {role}</Badge>
       </Flex>
 
       <Flex direction={{ base: "column", lg: "row" }} gap={10} p={8}>
-        {/* LEFT */}
         <VStack flex="3" spacing={10}>
-          {/* Progress */}
           <HStack spacing={6}>
             {questions.map((_, i) => (
               <React.Fragment key={i}>
-                <Circle size="70px" bg={i <= currentQ ? "teal.500" : "gray.300"} color="white" fontWeight="bold" fontSize="2xl">
-                  {i + 1}
-                </Circle>
+                <Circle size="70px" bg={i <= currentQ ? "teal.500" : "gray.300"} color="white" fontWeight="bold" fontSize="2xl">{i + 1}</Circle>
                 {i < questions.length - 1 && <Box w="120px" h="8px" bg={i < currentQ ? "teal.500" : "gray.300"} rounded="full" />}
               </React.Fragment>
             ))}
           </HStack>
 
-          {/* Camera */}
           <Box position="relative" w="640px" h="480px" bg="black" rounded="2xl" overflow="hidden" shadow="2xl">
             <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
             <canvas ref={canvasRef} width={640} height={480} className="absolute top-0 left-0" />
             {!faceDetected && cameraReady && (
-              <Center position="absolute" inset={0} bg="blackAlpha.800">
-                <Text color="white" fontSize="2xl" fontWeight="bold">HÃY NHÌN VÀO CAMERA</Text>
+              <Center position="absolute" inset={0} bg="blackAlpha.900">
+                <Text color="white" fontSize="3xl" fontWeight="bold">HÃY NHÌN VÀO CAMERA</Text>
               </Center>
             )}
           </Box>
 
-          {/* Question */}
-          <Box p={10} bg="white" rounded="2xl" shadow="lg" w="full" maxW="900px">
+          <Box p={10} bg="white" rounded="2xl" shadow="lg" w="full">
             <Text fontSize="lg" color="gray.600" textAlign="center">Question {currentQ + 1}</Text>
-            <Text fontSize="3xl" fontWeight="bold" textAlign="center" mt={4} color="gray.800">
-              {questions[currentQ]}
-            </Text>
-            {recording && <Text mt={6} color="red.500" fontWeight="bold" fontSize="xl">Đang ghi âm...</Text>}
+            <Text fontSize="3xl" fontWeight="bold" textAlign="center" mt={4}>{questions[currentQ]}</Text>
+            {recording && <Text mt={6} color="red.500" fontWeight="bold" fontSize="2xl">Đang ghi âm...</Text>}
           </Box>
 
-          {/* Buttons */}
-          {!started && (
-            <Button size="lg" colorScheme="teal" onClick={startCamera} leftIcon={<FaCamera />} px={24} py={8} fontSize="2xl">
-              Bật Camera & Bắt Đầu
-            </Button>
-          )}
-          {started && !finished && (
-            <Button size="lg" colorScheme="teal" isLoading={recording} leftIcon={<FaMicrophone />} fontSize="xl">
-              Đang lắng nghe...
-            </Button>
-          )}
+          {!cameraReady && <Button size="lg" colorScheme="teal" onClick={startCamera} leftIcon={<FaCamera />} px={24} py={8} fontSize="2xl">BẬT CAMERA</Button>}
+          {cameraReady && !started && faceDetected && <Button size="lg" colorScheme="teal" onClick={handleStart} px={32} py={10} fontSize="3xl">BẮT ĐẦU</Button>}
         </VStack>
 
-        {/* RIGHT – 3 Tabs */}
         <Box flex="1" bg="white" rounded="2xl" shadow="2xl" p={8}>
           <Tabs variant="soft-rounded" colorScheme="teal">
-            <TabList>
-              <Tab fontWeight="bold">Result</Tab>
-              <Tab fontWeight="bold">Face Analysis</Tab>
-              <Tab fontWeight="bold">AI Suggestion</Tab>
-            </TabList>
+            <TabList><Tab>Kết quả</Tab><Tab>Phân tích khuôn mặt</Tab><Tab>Gợi ý AI</Tab></TabList>
             <TabPanels mt={6}>
               <TabPanel>
                 {result ? (
-                  <VStack align="start" spacing={4}>
-                    <Text fontSize="7xl" fontWeight="bold" color={result.score >= 7 ? "green.500" : "red.500"}>
-                      {result.score}/10
-                    </Text>
-                    <Text fontSize="2xl" fontWeight="semibold">{result.score >= 7 ? "PASS" : "Cần cải thiện"}</Text>
+                  <VStack>
+                    <Text fontSize="8xl" fontWeight="bold" color={result.score >= 7 ? "green.500" : "red.500"}>{result.score}/10</Text>
+                    <Text fontSize="3xl">{result.score >= 7 ? "PASS" : "Cần cải thiện"}</Text>
                   </VStack>
-                ) : (
-                  <Text color="gray.500">Hoàn thành để xem kết quả</Text>
+                ) : <Text color="gray.500">Hoàn thành để xem kết quả</Text>}
+              </TabPanel>
+              <TabPanel>
+                <Text fontSize="6xl" fontWeight="bold" color="teal.500">{currentEmotion}</Text>
+                {faceDetected && (
+                  <VStack align="start" mt={4} spacing={2}>
+                    {Object.entries(emotionPercent).sort((a: any, b: any) => b[1] - a[1]).slice(0, 3).map(([emo, val]: any) => (
+                      <HStack key={emo} w="full">
+                        <Text w="100px">{emo.charAt(0).toUpperCase() + emo.slice(1)}</Text>
+                        <Progress value={val * 100} flex="1" colorScheme="teal" rounded="full" />
+                        <Text w="50px" textAlign="right">{Math.round(val * 100)}%</Text>
+                      </HStack>
+                    ))}
+                  </VStack>
                 )}
               </TabPanel>
               <TabPanel>
-                <Text fontSize="6xl" fontWeight="bold" color="teal.500">{emotion}</Text>
-                <Text mt={4} color="gray.600">Phân tích cảm xúc realtime</Text>
-              </TabPanel>
-              <TabPanel>
-                {result ? (
-                  <Text whiteSpace="pre-wrap" lineHeight="1.8" fontSize="lg">
-                    {result.suggestion}
-                  </Text>
-                ) : (
-                  <Text color="gray.500">Gợi ý xuất hiện sau khi hoàn thành</Text>
-                )}
+                {result ? <Text whiteSpace="pre-wrap" lineHeight="2">{result.suggestion}</Text> : <Text color="gray.500">Sẽ hiện sau khi hoàn thành</Text>}
               </TabPanel>
             </TabPanels>
           </Tabs>
