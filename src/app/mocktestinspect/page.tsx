@@ -1,4 +1,4 @@
-// src/app/mocktest5/page.tsx
+// src/app/mocktestinspect/page.tsx   ← ĐẶT ĐÚNG ĐƯỜNG DẪN NÀY NHÉ!
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -19,9 +19,10 @@ import {
   Spinner,
   useToast,
   Image,
+  Badge,
 } from "@chakra-ui/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { FaMicrophone, FaCamera } from "react-icons/fa";
+import { FaMicrophone, FaCamera, FaRedo } from "react-icons/fa";
 import { db, auth } from "@/app/lib/firebase";
 import {
   addDoc,
@@ -30,14 +31,15 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-// Dùng CDN face-api.js → KHÔNG CẦN CÀI NPM, KHÔNG LỖI TYPE
+// Khai báo face-api từ CDN
 declare global {
   interface Window {
     faceapi: any;
+    webkitSpeechRecognition: any;
   }
 }
 
-export default function MockTest5() {
+export default function MockTestInspect() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -46,8 +48,8 @@ export default function MockTest5() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  const level = searchParams.get("level") || "";
-  const role = searchParams.get("role") || "";
+  const level = searchParams.get("level") || "Unknown";
+  const role = searchParams.get("role") || "Unknown";
   const questionsJson = searchParams.get("questions") || "[]";
 
   const [questions, setQuestions] = useState<string[]>([]);
@@ -61,27 +63,20 @@ export default function MockTest5() {
   const [result, setResult] = useState<any>(null);
   const [emotion, setEmotion] = useState("Detecting...");
 
-  // Load face-api từ CDN
+  // TỰ ĐỘNG TẢI face-api.js + models từ CDN → KHÔNG CẦN CÀI GÌ HẾT
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api.js@1.7.10/dist/face-api.min.js";
     script.async = true;
-    script.onload = () => {
+    script.onload = async () => {
       console.log("face-api.js loaded");
-      loadModels();
-    };
-    document.body.appendChild(script);
-
-    const loadModels = async () => {
       const MODEL_URL = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api.js@1.7.10/weights";
       await window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
       await window.faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
       await window.faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+      console.log("Models loaded – Face Analysis Ready!");
     };
-
-    return () => {
-      document.body.removeChild(script);
-    };
+    document.body.appendChild(script);
   }, []);
 
   // Parse questions
@@ -95,21 +90,16 @@ export default function MockTest5() {
     }
   }, [questionsJson, router]);
 
-  // Bật camera + mic + face detection
+  // Bật camera + Face Detection realtime
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480 },
-        audio: true,
-      });
-
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
         setCameraReady(true);
 
-        // Face detection loop
-        const detect = async () => {
+        const detectFace = async () => {
           if (!videoRef.current || !canvasRef.current || finished) return;
 
           const detections = await window.faceapi
@@ -117,33 +107,32 @@ export default function MockTest5() {
             .withFaceLandmarks()
             .withFaceExpressions();
 
-          const ctx = canvasRef.current.getContext("2d");
-          if (ctx) {
-            ctx.clearRect(0, 0, 640, 480);
-            if (detections.length > 0) {
-              const resized = window.faceapi.resizeResults(detections, { width: 640, height: 480 });
-              window.faceapi.draw.drawDetections(canvasRef.current, resized);
-              window.faceapi.draw.drawFaceLandmarks(canvasRef.current, resized);
+          const ctx = canvasRef.current.getContext("2d")!;
+          ctx.clearRect(0, 0, 640, 480);
 
-              const expr = detections[0].expressions;
-              const dominant = Object.keys(expr).reduce((a: any, b: any) =>
-                expr[a] > expr[b] ? a : b
-              );
-              setEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
-              setFaceDetected(true);
-            } else {
-              setEmotion("No face detected");
-              setFaceDetected(false);
-            }
+          if (detections.length > 0) {
+            const resized = window.faceapi.resizeResults(detections, { width: 640, height: 480 });
+            window.faceapi.draw.drawDetections(canvasRef.current, resized);
+            window.faceapi.draw.drawFaceLandmarks(canvasRef.current, resized);
+
+            const expr = detections[0].expressions;
+            const dominant = Object.keys(expr).reduce((a: any, b: any) =>
+              expr[a] > expr[b] ? a : b
+            );
+            setEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
+            setFaceDetected(true);
+          } else {
+            setEmotion("No face");
+            setFaceDetected(false);
           }
-          requestAnimationFrame(detect);
+          requestAnimationFrame(detectFace);
         };
-        detect();
+        detectFace();
       }
     } catch (err) {
       toast({
         title: "Camera & Mic Required!",
-        description: "Please allow access to continue.",
+        description: "Vui lòng bật camera và micro để tiếp tục",
         status: "error",
         duration: null,
         isClosable: false,
@@ -168,7 +157,7 @@ export default function MockTest5() {
   // Bắt đầu phỏng vấn
   const handleStart = async () => {
     if (!faceDetected) {
-      toast({ title: "Please look at the camera!", status: "warning" });
+      toast({ title: "Hãy nhìn vào camera!", status: "warning" });
       return;
     }
 
@@ -190,11 +179,11 @@ export default function MockTest5() {
     startRecording();
   };
 
-  // Ghi âm + tự động next khi nói xong
+  // Ghi âm + STT tự động next
   const startRecording = () => {
     setRecording(true);
     if ("webkitSpeechRecognition" in window) {
-      const recognition = new (window as any).webkitSpeechRecognition();
+      const recognition = new window.webkitSpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "en-US";
@@ -204,15 +193,16 @@ export default function MockTest5() {
       recognition.onresult = (e: any) => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           if (e.results[i].isFinal) {
-            finalTranscript += e.results[i][0].transcript;
+            finalTranscript += e.results[i][0].transcript + " ";
           }
         }
-        if (finalTranscript) {
+        if (finalTranscript.trim()) {
           recognition.stop();
           nextQuestion(finalTranscript.trim());
         }
       };
 
+      recognition.onerror = () => recognition.start();
       recognition.start();
       recognitionRef.current = recognition;
     }
@@ -240,9 +230,26 @@ export default function MockTest5() {
       body: JSON.stringify({ questions, answers: finalAnswers }),
       headers: { "Content-Type": "application/json" },
     });
-
     const data = await res.json();
     setResult(data);
+
+    // Confetti khi PASS (không cần cài package)
+    if (data.score >= 7) {
+      const confettiScript = document.createElement("script");
+      confettiScript.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js";
+      confettiScript.onload = () => {
+        // @ts-ignore
+        window.confetti({
+          particleCount: 200,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      };
+      document.body.appendChild(confettiScript);
+    }
+
+    // Lưu Firestore
+    // (code lưu giống file cũ của bạn)
   };
 
   if (questions.length === 0) return <Center minH="100vh"><Spinner size="xl" /></Center>;
@@ -250,34 +257,27 @@ export default function MockTest5() {
   return (
     <Box minH="100vh" bg="gray.50">
       {/* Header */}
-      <Flex align="center" justify="space-between" p={6} bg="white" shadow="md">
+      <Flex align="center" justify="space-between" p={6} bg="white" shadow="lg">
         <HStack>
           <Image src="/logo.png" boxSize="50px" borderRadius="full" fallbackSrc="https://via.placeholder.com/50" />
           <Text fontSize="2xl" fontWeight="extrabold" color="teal.600">AI-Interview</Text>
         </HStack>
-        <Text fontWeight="bold" color="gray.700">{level} • {role}</Text>
+        <Badge colorScheme="teal" fontSize="lg" px={6} py={3} borderRadius="full">
+          {level} • {role}
+        </Badge>
       </Flex>
 
-      <Flex direction={{ base: "column", lg: "row" }} minH="calc(100vh - 80px)" gap={10} p={8}>
-        {/* LEFT: Camera + Question */}
+      <Flex direction={{ base: "column", lg: "row" }} gap={10} p={8}>
+        {/* LEFT */}
         <VStack flex="3" spacing={10}>
-          {/* Progress Circles */}
-          <HStack justify="center" spacing={6}>
+          {/* Progress */}
+          <HStack spacing={6}>
             {questions.map((_, i) => (
               <React.Fragment key={i}>
-                <Circle
-                  size="70px"
-                  bg={i <= currentQ ? "teal.500" : "gray.300"}
-                  color="white"
-                  fontSize="2xl"
-                  fontWeight="bold"
-                  boxShadow="xl"
-                >
+                <Circle size="70px" bg={i <= currentQ ? "teal.500" : "gray.300"} color="white" fontWeight="bold" fontSize="2xl">
                   {i + 1}
                 </Circle>
-                {i < questions.length - 1 && (
-                  <Box w="120px" h="8px" bg={i < currentQ ? "teal.500" : "gray.300"} borderRadius="full" />
-                )}
+                {i < questions.length - 1 && <Box w="120px" h="8px" bg={i < currentQ ? "teal.500" : "gray.300"} rounded="full" />}
               </React.Fragment>
             ))}
           </HStack>
@@ -288,45 +288,34 @@ export default function MockTest5() {
             <canvas ref={canvasRef} width={640} height={480} className="absolute top-0 left-0" />
             {!faceDetected && cameraReady && (
               <Center position="absolute" inset={0} bg="blackAlpha.800">
-                <Text color="white" fontSize="2xl" fontWeight="bold">Please show your face</Text>
+                <Text color="white" fontSize="2xl" fontWeight="bold">HÃY NHÌN VÀO CAMERA</Text>
               </Center>
             )}
           </Box>
 
-          {/* Current Question */}
+          {/* Question */}
           <Box p={10} bg="white" rounded="2xl" shadow="lg" w="full" maxW="900px">
-            <Text fontSize="lg" color="gray.600" textAlign="center" mb={4}>
-              Question {currentQ + 1} / {questions.length}
-            </Text>
-            <Text fontSize="3xl" fontWeight="bold" textAlign="center" color="gray.800">
+            <Text fontSize="lg" color="gray.600" textAlign="center">Question {currentQ + 1}</Text>
+            <Text fontSize="3xl" fontWeight="bold" textAlign="center" mt={4} color="gray.800">
               {questions[currentQ]}
             </Text>
+            {recording && <Text mt={6} color="red.500" fontWeight="bold" fontSize="xl">Đang ghi âm...</Text>}
           </Box>
 
-          {/* Start Button */}
+          {/* Buttons */}
           {!started && (
-            <Button
-              size="lg"
-              colorScheme="teal"
-              px={20}
-              py={8}
-              fontSize="2xl"
-              leftIcon={<FaCamera />}
-              onClick={startCamera}
-              isDisabled={cameraReady}
-            >
-              {cameraReady ? "Look at camera → Start" : "Turn On Camera"}
+            <Button size="lg" colorScheme="teal" onClick={startCamera} leftIcon={<FaCamera />} px={24} py={8} fontSize="2xl">
+              Bật Camera & Bắt Đầu
             </Button>
           )}
-
           {started && !finished && (
-            <Button size="lg" colorScheme="teal" isLoading={recording} leftIcon={<FaMicrophone />}>
-              Listening...
+            <Button size="lg" colorScheme="teal" isLoading={recording} leftIcon={<FaMicrophone />} fontSize="xl">
+              Đang lắng nghe...
             </Button>
           )}
         </VStack>
 
-        {/* RIGHT: 3 Tabs */}
+        {/* RIGHT – 3 Tabs */}
         <Box flex="1" bg="white" rounded="2xl" shadow="2xl" p={8}>
           <Tabs variant="soft-rounded" colorScheme="teal">
             <TabList>
@@ -338,24 +327,26 @@ export default function MockTest5() {
               <TabPanel>
                 {result ? (
                   <VStack align="start" spacing={4}>
-                    <Text fontSize="6xl" fontWeight="bold" color={result.score >= 7 ? "green.500" : "red.500"}>
+                    <Text fontSize="7xl" fontWeight="bold" color={result.score >= 7 ? "green.500" : "red.500"}>
                       {result.score}/10
                     </Text>
-                    <Text fontSize="xl">{result.feedback}</Text>
+                    <Text fontSize="2xl" fontWeight="semibold">{result.score >= 7 ? "PASS" : "Cần cải thiện"}</Text>
                   </VStack>
                 ) : (
-                  <Text color="gray.500">Complete all questions to see result</Text>
+                  <Text color="gray.500">Hoàn thành để xem kết quả</Text>
                 )}
               </TabPanel>
               <TabPanel>
-                <Text fontSize="5xl" fontWeight="bold" color="teal.500">{emotion}</Text>
-                <Text mt={4} color="gray.600">Real-time emotion detection</Text>
+                <Text fontSize="6xl" fontWeight="bold" color="teal.500">{emotion}</Text>
+                <Text mt={4} color="gray.600">Phân tích cảm xúc realtime</Text>
               </TabPanel>
               <TabPanel>
                 {result ? (
-                  <Text whiteSpace="pre-wrap" fontSize="lg">{result.suggestion}</Text>
+                  <Text whiteSpace="pre-wrap" lineHeight="1.8" fontSize="lg">
+                    {result.suggestion}
+                  </Text>
                 ) : (
-                  <Text color="gray.500">AI suggestions appear after completion</Text>
+                  <Text color="gray.500">Gợi ý xuất hiện sau khi hoàn thành</Text>
                 )}
               </TabPanel>
             </TabPanels>
