@@ -4,10 +4,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Box, Flex, Text, Button, VStack, HStack, Circle, Tabs, TabList, Tab, TabPanels, TabPanel,
-  Center, Spinner, useToast, Image, Badge, Progress, Alert, AlertIcon
+  Center, Spinner, useToast, Image, Badge, Progress
 } from "@chakra-ui/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { FaMicrophone, FaCamera, FaPlay } from "react-icons/fa";
+import { FaPlay } from "react-icons/fa";
 import { db, auth } from "@/app/lib/firebase";
 import { addDoc, collection, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import * as faceapi from "@vladmandic/face-api";
@@ -33,6 +33,7 @@ export default function MockTestInspect() {
   const timerRef = useRef<any>(null);
   const lastSpokenAtRef = useRef<number>(0);
   const recordingStartedAtRef = useRef<number>(0);
+  const interviewDocRef = useRef<any>(null);
 
   const level = searchParams.get("level") || "Intern";
   const role = searchParams.get("role") || "Front-End";
@@ -42,7 +43,6 @@ export default function MockTestInspect() {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const [emotionLog, setEmotionLog] = useState<string[]>([]);
-  const [cameraReady, setCameraReady] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [started, setStarted] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -54,16 +54,15 @@ export default function MockTestInspect() {
   const [loadingModels, setLoadingModels] = useState(true);
   const [countdown, setCountdown] = useState(60);
   const [interviewId, setInterviewId] = useState<string | null>(null);
-  const [retryQuestion, setRetryQuestion] = useState<number | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
-  // === LOAD FACE-API MODELS ===
+  // LOAD FACE-API MODELS
   useEffect(() => {
     const load = async () => {
       await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
       await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
       await faceapi.nets.faceExpressionNet.loadFromUri("/models");
       setLoadingModels(false);
-      toast({ title: "AI Face Detection đã sẵn sàng!", status: "success" });
     };
     load();
   }, []);
@@ -77,47 +76,103 @@ export default function MockTestInspect() {
     }
   }, [questionsJson, router]);
 
-  // === CAMERA + FACE DETECTION REALTIME ===
-  const startCamera = async () => {
+  // START EVERYTHING: Camera + Interview
+  const handleStart = async () => {
+    if (started) return;
+
+    setIsLoading(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // 1. Bật camera + mic
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480 },
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+      setStream(mediaStream);
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = mediaStream;
         videoRef.current.play();
-        setCameraReady(true);
-
-        const detect = async () => {
-          if (!videoRef.current || !canvasRef.current || finished) return;
-          const detections = await faceapi.detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
-            .withFaceLandmarks().withFaceExpressions();
-
-          const ctx = canvasRef.current.getContext("2d")!;
-          ctx.clearRect(0, 0, 640, 480);
-
-          if (detections.length > 0) {
-            const resized = faceapi.resizeResults(detections, { width: 640, height: 480 });
-            faceapi.draw.drawDetections(canvasRef.current, resized);
-            faceapi.draw.drawFaceLandmarks(canvasRef.current, resized);
-
-            const expr = detections[0].expressions;
-            const dominant = Object.keys(expr).reduce((a, b) => (expr as any)[a] > (expr as any)[b] ? a : b);
-            setCurrentEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
-            setEmotionPercent(expr);
-            setFaceDetected(true);
-          } else {
-            setFaceDetected(false);
-            setCurrentEmotion("No face");
-          }
-          if (!finished) requestAnimationFrame(detect);
-        };
-        detect();
       }
+
+      // 2. Bắt đầu face detection realtime
+      const detectFace = async () => {
+        if (!videoRef.current || !canvasRef.current || finished) return;
+        const detections = await faceapi.detectAllFaces(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks().withFaceExpressions();
+
+        const ctx = canvasRef.current.getContext("2d")!;
+        ctx.clearRect(0, 0, 640, 480);
+
+        if (detections.length > 0) {
+          const resized = faceapi.resizeResults(detections, { width: 640, height: 480 });
+          faceapi.draw.drawDetections(canvasRef.current, resized);
+          faceapi.draw.drawFaceLandmarks(canvasRef.current, resized);
+
+          const expr = detections[0].expressions;
+          const dominant = Object.keys(expr).reduce((a, b) => (expr as any)[a] > (expr as any)[b] ? a : b);
+          setCurrentEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
+          setEmotionPercent(expr);
+          setFaceDetected(true);
+        } else {
+          setFaceDetected(false);
+          setCurrentEmotion("No face");
+        }
+        if (!finished) requestAnimationFrame(detectFace);
+      };
+      detectFace();
+
+      // 3. Tạo interview record
+      const docRef = await addDoc(collection(db, "interviews"), {
+        userId: auth.currentUser?.uid || "guest",
+        level, role, questions,
+        answers: [], emotionLog: [], result: null,
+        createdAt: serverTimestamp(),
+        finished: false,
+      });
+      setInterviewId(docRef.id);
+      interviewDocRef.current = docRef;
+
+      // 4. Bắt đầu phỏng vấn
+      setStarted(true);
+      setIsLoading(false);
+
+      await speakAndStartRecording(0);
+
     } catch (err) {
-      toast({ title: "Không thể bật camera/mic", status: "error" });
+      toast({ title: "Không thể truy cập camera/mic", status: "error", description: "Vui lòng cấp quyền!" });
+      setIsLoading(false);
     }
   };
 
-  // === TTS - ĐỌC CÂU HỎI ===
+  const speakAndStartRecording = async (qIndex: number) => {
+    if (qIndex >= questions.length) {
+      finishInterview();
+      return;
+    }
+
+    setCurrentQ(qIndex);
+    setCountdown(60);
+    setRecording(false);
+
+    // Đọc câu hỏi
+    await speak(questions[qIndex]);
+
+    // Beep + delay nhỏ
+    playBeep();
+    await new Promise(r => setTimeout(r, 800));
+
+    // Bắt đầu recording
+    startRecording();
+  };
+
+  const playBeep = () => {
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = 800; g.gain.value = 0.1;
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); setTimeout(() => o.stop(), 150);
+  };
+
   const speak = async (text: string) => {
     try {
       const res = await fetch("/api/tts", {
@@ -130,47 +185,22 @@ export default function MockTestInspect() {
         const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
         await audio.play();
       }
-    } catch (err) {
+    } catch {
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "en-US";
       speechSynthesis.speak(utter);
     }
   };
 
-  // === BẮT ĐẦU PHỎNG VẤN ===
-  const handleStart = async () => {
-    if (!faceDetected) return toast({ title: "Hãy nhìn thẳng vào camera!", status: "warning" });
-    setStarted(true);
-    setCountdown(60);
-
-    // Tạo interview record
-    try {
-      const docRef = await addDoc(collection(db, "interviews"), {
-        userId: auth.currentUser?.uid || "guest",
-        level, role, questions,
-        answers: [], emotionLog: [], result: null,
-        createdAt: serverTimestamp(),
-        finished: false,
-      });
-      setInterviewId(docRef.id);
-    } catch (err) { console.error(err); }
-
-    await speak(questions[0]);
-    setTimeout(() => startRecording(), 1000);
-  };
-
-  // === RECORDING THÔNG MINH ===
-  const startRecording = async () => {
+  const startRecording = () => {
+    if (!stream) return;
     setRecording(true);
     setCountdown(60);
     lastSpokenAtRef.current = Date.now();
     recordingStartedAtRef.current = Date.now();
     audioChunksRef.current = [];
 
-    const stream = videoRef.current?.srcObject as MediaStream;
-    if (!stream) return;
-
-    // Web Speech Recognition (fallback + live)
+    // Web Speech API (live transcript + silence detection)
     if ("webkitSpeechRecognition" in window) {
       const recognition = new (window as any).webkitSpeechRecognition();
       recognition.continuous = true;
@@ -178,36 +208,37 @@ export default function MockTestInspect() {
       recognition.lang = "en-US";
 
       recognition.onresult = (e: any) => {
-        let final = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) final += e.results[i][0].transcript + " ";
+          if (e.results[i].isFinal) {
+            lastSpokenAtRef.current = Date.now();
+          }
         }
-        if (final) lastSpokenAtRef.current = Date.now();
       };
-      recognition.onerror = () => recognition.start();
+      recognition.onerror = () => recording && recognition.start();
       recognition.onend = () => recording && recognition.start();
       recognition.start();
       recognitionRef.current = recognition;
     }
 
-    // MediaRecorder fallback
+    // MediaRecorder
     const recorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
     recorder.ondataavailable = e => e.data.size > 0 && audioChunksRef.current.push(e.data);
     recorder.start();
     mediaRecorderRef.current = recorder;
 
-    // Timer + Silence Detection
+    // Countdown
     timerRef.current = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) { stopRecording(); return 0; }
+        if (c <= 1) { clearInterval(timerRef.current); stopRecording(); return 0; }
         return c - 1;
       });
     }, 1000);
 
+    // Silence detection
     const checkSilence = () => {
       if (!recording) return;
       const now = Date.now();
-      if (now - lastSpokenAtRef.current > 8000 && now - recordingStartedAtRef.current > 8000) {
+      if (now - lastSpokenAtRef.current > 7000 && now - recordingStartedAtRef.current > 8000) {
         stopRecording();
       } else {
         setTimeout(checkSilence, 1000);
@@ -230,81 +261,65 @@ export default function MockTestInspect() {
       transcript = await new Promise<string>((resolve) => {
         reader.onloadend = async () => {
           const base64 = (reader.result as string).split(",")[1];
-          try {
-            const res = await fetch("/api/stt", {
-              method: "POST",
-              body: JSON.stringify({ audio: base64 }),
-              headers: { "Content-Type": "application/json" },
-            });
-            const data = await res.json();
-            resolve(data.transcription || "");
-          } catch {
-            resolve("");
-          }
+          const res = await fetch("/api/stt", {
+            method: "POST",
+            body: JSON.stringify({ audio: base64 }),
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await res.json();
+          resolve(data.transcription || "");
         };
         reader.readAsDataURL(blob);
       });
     }
 
-    await saveAnswerAndNext(transcript.trim() || "(No answer)");
-  };
-
-  // === LƯU + NEXT ===
-  const saveAnswerAndNext = async (answer: string) => {
+    const answer = transcript.trim() || "(No answer recorded)";
     const newAnswers = [...answers, answer];
     const newEmotions = [...emotionLog, currentEmotion];
     setAnswers(newAnswers);
     setEmotionLog(newEmotions);
 
-    // Update Firebase
-    if (interviewId) {
-      await updateDoc(doc(db, "interviews", interviewId), {
+    // Save to Firebase
+    if (interviewDocRef.current) {
+      await updateDoc(interviewDocRef.current, {
         answers: newAnswers,
         emotionLog: newEmotions,
         updatedAt: serverTimestamp(),
       });
     }
 
-    if (currentQ + 1 >= questions.length) {
-      finishInterview(newAnswers, newEmotions);
-    } else {
-      setCurrentQ(currentQ + 1);
-      setCountdown(60);
-      await speak(questions[currentQ + 1]);
-      setTimeout(() => startRecording(), 1500);
-    }
+    // Next question
+    setTimeout(() => speakAndStartRecording(currentQ + 1), 1200);
   };
 
-  // === HOÀN THÀNH + EVALUATE ===
-  const finishInterview = async (finalAnswers: string[], finalEmotions: string[]) => {
-    setRecording(false);
+  const finishInterview = async () => {
     setFinished(true);
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/evaluate", {
         method: "POST",
-        body: JSON.stringify({ questions, answers: finalAnswers }),
+        body: JSON.stringify({ questions, answers }),
         headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
       setResult(data);
 
-      if (interviewId) {
-        await updateDoc(doc(db, "interviews", interviewId), {
+      if (interviewDocRef.current) {
+        await updateDoc(interviewDocRef.current, {
           result: data,
           finished: true,
           finishedAt: serverTimestamp(),
         });
       }
 
-      // CONFETTI
       if (data.score >= 7) {
         const script = document.createElement("script");
         script.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js";
-        script.onload = () => (window as any).confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } });
+        script.onload = () => (window as any).confetti({ particleCount: 300, spread: 100 });
         document.body.appendChild(script);
       }
+
     } catch (err) {
       toast({ title: "Lỗi đánh giá", status: "error" });
     } finally {
@@ -312,127 +327,125 @@ export default function MockTestInspect() {
     }
   };
 
-  // === RETRY CÂU HỎI ===
-  const handleRetry = async (idx: number) => {
-    setRetryQuestion(idx);
-    setCurrentQ(idx);
-    setStarted(true);
-    setFinished(false);
-    setCountdown(60);
-    await speak(questions[idx]);
-    setTimeout(() => startRecording(), 1000);
-  };
-
   if (loadingModels || questions.length === 0) {
     return (
       <Center minH="100vh" flexDir="column">
-        <Spinner size="xl" color="teal.500" thickness="4px" />
-        <Text mt={4} fontSize="xl">Đang tải AI Face Detection...</Text>
+        <Spinner size="xl" color="teal.500" thickness="5px" />
+        <Text mt={6} fontSize="2xl" fontWeight="bold">Đang tải AI Pro...</Text>
       </Center>
     );
   }
 
   return (
     <Box minH="100vh" bg="gray.50">
-      <Flex align="center" justify="space-between" p={6} bg="white" shadow="lg">
+      <Flex align="center" justify="space-between" p={6} bg="white" shadow="2xl">
         <HStack>
           <Image src="/logo.png" boxSize="50px" borderRadius="full" />
-          <Text fontSize="2xl" fontWeight="bold" color="teal.600">AI-Interview Pro</Text>
+          <Text fontSize="3xl" fontWeight="extrabold" color="teal.600">AI-Interview Pro</Text>
         </HStack>
-        <Badge colorScheme="teal" fontSize="lg" px={6} py={3}>{level} • {role}</Badge>
+        <Badge colorScheme="teal" fontSize="xl" px={8} py={4} borderRadius="full">
+          {level} • {role}
+        </Badge>
       </Flex>
 
-      <Flex direction={{ base: "column", lg: "row" }} gap={10} p={8}>
+      <Flex direction={{ base: "column", lg: "row" }} gap={12} p={8}>
         <VStack flex="3" spacing={10}>
-          {/* Progress Circles */}
           <HStack spacing={6} flexWrap="wrap" justify="center">
             {questions.map((_, i) => (
               <React.Fragment key={i}>
-                <Circle size="70px" bg={i <= currentQ ? "teal.500" : "gray.300"} color="white" fontWeight="bold" fontSize="2xl">
+                <Circle size="80px" bg={i <= currentQ ? "teal.500" : "gray.300"} color="white" fontWeight="bold" fontSize="2xl" boxShadow="lg">
                   {i + 1}
                 </Circle>
-                {i < questions.length - 1 && <Box w="120px" h="8px" bg={i < currentQ ? "teal.500" : "gray.300"} rounded="full" />}
+                {i < questions.length - 1 && <Box w="140px" h="10px" bg={i < currentQ ? "teal.500" : "gray.300"} rounded="full" />}
               </React.Fragment>
             ))}
           </HStack>
 
-          {/* Video + Canvas */}
-          <Box position="relative" w="640px" h="480px" bg="black" rounded="2xl" overflow="hidden" shadow="2xl">
+          <Box position="relative" w="640px" h="480px" bg="black" rounded="3xl" overflow="hidden" shadow="2xl">
             <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
             <canvas ref={canvasRef} width={640} height={480} className="absolute top-0 left-0" />
-            {!faceDetected && cameraReady && (
+            {!faceDetected && started && (
               <Center position="absolute" inset={0} bg="blackAlpha.900">
-                <Text color="white" fontSize="3xl" fontWeight="bold">HÃY NHÌN VÀO CAMERA</Text>
+                <Text color="white" fontSize="4xl" fontWeight="bold">HÃY NHÌN VÀO CAMERA</Text>
               </Center>
             )}
           </Box>
 
-          {/* Question Box */}
-          <Box p={10} bg="white" rounded="2xl" shadow="lg" w="full" textAlign="center">
+          <Box p={10} bg="white" rounded="3xl" shadow="2xl" w="full" textAlign="center">
             <Text fontSize="lg" color="gray.600">Question {currentQ + 1} / {questions.length}</Text>
-            <Text fontSize="3xl" fontWeight="bold" mt={4}>{questions[currentQ]}</Text>
+            <Text fontSize="3xl" fontWeight="bold" mt={4} lineHeight="1.4">
+              {questions[currentQ]}
+            </Text>
             {recording && (
-              <Text mt={6} color="red.500" fontWeight="bold" fontSize="2xl">
+              <Text mt={8} color="red.500" fontWeight="bold" fontSize="2xl">
                 Recording... ({countdown}s)
               </Text>
             )}
           </Box>
 
-          {/* Buttons */}
-          {!cameraReady && (
-            <Button size="lg" colorScheme="teal" onClick={startCamera} leftIcon={<FaCamera />} px={24} py={8} fontSize="2xl">
-              BẬT CAMERA & MIC
-            </Button>
-          )}
-          {cameraReady && !started && faceDetected && (
-            <Button size="lg" colorScheme="teal" onClick={handleStart} leftIcon={<FaPlay />} px={32} py={10} fontSize="3xl">
-              BẮT ĐẦU PHỎNG VẤN
-            </Button>
-          )}
-          {recording && (
-            <Button size="lg" colorScheme="orange" onClick={stopRecording}>
-              Dừng & Chuyển câu
+          {/* NÚT START DUY NHẤT */}
+          {!started && (
+            <Button
+              size="lg"
+              colorScheme="teal"
+              onClick={handleStart}
+              isLoading={isLoading}
+              loadingText="Đang khởi động..."
+              leftIcon={<FaPlay />}
+              px={40}
+              py={10}
+              fontSize="3xl"
+              fontWeight="bold"
+              borderRadius="full"
+              boxShadow="2xl"
+              _hover={{ transform: "scale(1.05)" }}
+              transition="0.2s"
+            >
+              START
             </Button>
           )}
         </VStack>
 
-        {/* Right Panel */}
-        <Box flex="1" bg="white" rounded="2xl" shadow="2xl" p={8}>
+        {/* Right Panel - Giữ nguyên đẹp như cũ */}
+        <Box flex="1" bg="white" rounded="3xl" shadow="2xl" p={8}>
           <Tabs variant="soft-rounded" colorScheme="teal">
             <TabList>
-              <Tab>Kết quả</Tab>
-              <Tab>Cảm xúc</Tab>
-              <Tab>Gợi ý AI</Tab>
+              <Tab fontWeight="bold">Kết quả</Tab>
+              <Tab fontWeight="bold">Cảm xúc</Tab>
+              <Tab fontWeight="bold">Gợi ý AI</Tab>
             </TabList>
             <TabPanels mt={6}>
               <TabPanel>
                 {result ? (
                   <VStack spacing={6}>
-                    <Text fontSize="8xl" fontWeight="bold" color={result.score >= 7 ? "green.500" : "red.500"}>
+                    <Text fontSize="9xl" fontWeight="black" color={result.score >= 7 ? "green.500" : "red.500"}>
                       {result.score}/10
                     </Text>
-                    <Text fontSize="3xl">{result.score >= 7 ? "PASS!" : "Cần cải thiện"}</Text>
-                    <Text color="gray.600">{result.feedback}</Text>
+                    <Text fontSize="4xl" fontWeight="bold">{result.score >= 7 ? "PASS!" : "Cần cải thiện"}</Text>
                   </VStack>
                 ) : (
-                  <Text color="gray.500">Hoàn thành để xem kết quả</Text>
+                  <Text color="gray.500" fontSize="lg">Đang phỏng vấn...</Text>
                 )}
               </TabPanel>
 
               <TabPanel>
-                <Text fontSize="6xl" fontWeight="bold" color="teal.500" textAlign="center">
+                <Text fontSize="7xl" fontWeight="bold" color="teal.500" textAlign="center">
                   {currentEmotion}
                 </Text>
                 {faceDetected && Object.keys(emotionPercent).length > 0 && (
-                  <VStack align="start" mt={6} spacing={3}>
+                  <VStack align="start" mt={6} spacing={4}>
                     {Object.entries(emotionPercent)
                       .sort((a: any, b: any) => b[1] - a[1])
                       .slice(0, 4)
                       .map(([emo, val]: any) => (
                         <HStack key={emo} w="full">
-                          <Text w="120px" fontSize="sm">{emo.charAt(0).toUpperCase() + emo.slice(1)}</Text>
-                          <Progress value={val * 100} flex="1" colorScheme="teal" rounded="full" />
-                          <Text w="50px" textAlign="right" fontWeight="bold">{Math.round(val * 100)}%</Text>
+                          <Text w="130px" fontSize="lg" fontWeight="medium">
+                            {emo.charAt(0).toUpperCase() + emo.slice(1)}
+                          </Text>
+                          <Progress value={val * 100} flex="1" colorScheme="teal" height="24px" rounded="full" />
+                          <Text w="60px" textAlign="right" fontWeight="bold" fontSize="lg">
+                            {Math.round(val * 100)}%
+                          </Text>
                         </HStack>
                       ))}
                   </VStack>
@@ -441,20 +454,17 @@ export default function MockTestInspect() {
 
               <TabPanel>
                 {result ? (
-                  <VStack align="start" spacing={4}>
+                  <VStack align="start" spacing={5}>
                     {result.suggestion.split("\n\n").map((sug: string, i: number) => (
-                      <Box key={i} p={4} bg="gray.50" rounded="lg" border="1px solid" borderColor="gray.200">
-                        <Text whiteSpace="pre-wrap" fontSize="sm" lineHeight="1.7">{sug}</  Text>
-                        {finished && (
-                          <Button mt={2} size="sm" colorScheme="teal" onClick={() => handleRetry(i)}>
-                            Thử lại câu này
-                          </Button>
-                        )}
+                      <Box key={i} p={5} bg="gray.50" rounded="xl" border="2px solid" borderColor="gray.200">
+                        <Text whiteSpace="pre-wrap" lineHeight="1.8" fontSize="sm">
+                          {sug}
+                        </Text>
                       </Box>
                     ))}
                   </VStack>
                 ) : (
-                  <Text color="gray.500">Sẽ hiện sau khi hoàn thành</Text>
+                  <Text color="gray.500">Sẽ hiện khi hoàn thành</Text>
                 )}
               </TabPanel>
             </TabPanels>
