@@ -540,6 +540,7 @@ export default function MockTestInspect() {
                   {emotionLog.map((e, i) => (
                     <Text key={i}>Q{i + 1}: {e}</Text>
                   ))}
+                  
                 </VStack>
               </TabPanel>
               <TabPanel>
