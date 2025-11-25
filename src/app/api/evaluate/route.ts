@@ -83,8 +83,8 @@ Respond with ONLY this JSON format, no extra text:
     }
 
     // Tính điểm trung bình
-    const avgScore = Math.round(perQuestionScores.reduce((a, b) => a + b, 0) / questions.length * 10) / 10;
-
+// Chỉ thay dòng này để điểm đẹp hơn:
+const avgScore = Number((perQuestionScores.reduce((a, b) => a + b, 0) / questions.length).toFixed(1));
     // === TẠO GỢI Ý CẢI THIỆN (phần hay bị die nhất) ===
     let suggestion = "";
     for (let i = 0; i < questions.length; i++) {
