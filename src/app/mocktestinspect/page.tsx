@@ -357,12 +357,26 @@ export default function MockTestInspect() {
 
   return (
     <Box minH="100vh" bg="gray.50">
-      <Flex align="center" justify="space-between" p={6} bg="white" shadow="lg">
-        <HStack>
-          <Image src="/logo.png" boxSize="50px" borderRadius="full" />
-          <Text fontSize="3xl" fontWeight="extrabold" color="teal.600">AI Interview Pro</Text>
+      <Flex
+        as="header"
+        align="center"
+        justify="space-between"
+        p={4}
+        bg="white"
+        shadow="lg"
+        cursor="pointer"
+        onClick={() => router.push("/auth/dashboard")}
+        _hover={{ shadow: "xl" }}
+      >
+        <HStack spacing={3}>
+          <Image src="/logo.png" boxSize={{ base: "40px", md: "50px" }} borderRadius="full" />
+          <Text fontSize={{ base: "xl", md: "3xl" }} fontWeight="extrabold" color="teal.600">
+            AI Interview Pro
+          </Text>
         </HStack>
-        <Badge colorScheme="teal" fontSize="lg" px={6} py={3} borderRadius="full">{level} • {role}</Badge>
+        <Badge colorScheme="teal" fontSize={{ base: "md", md: "lg" }} px={4} py={2} borderRadius="full">
+          {level} • {role}
+        </Badge>
       </Flex>
 
       <Flex direction={{ base: "column", lg: "row" }} gap={10} p={8}>
