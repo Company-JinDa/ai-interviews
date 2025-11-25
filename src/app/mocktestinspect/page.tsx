@@ -1,9 +1,10 @@
+// src/app/mocktestinspect/page.tsx
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   Box, Flex, Text, Button, VStack, HStack, Circle, Tabs, TabList, Tab, TabPanels, TabPanel,
-  Center, Spinner, useToast, Image, Badge, IconButton
+  Center, Spinner, useToast, Image, Badge, IconButton, Progress
 } from "@chakra-ui/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FaPlay, FaArrowRight, FaMicrophone } from "react-icons/fa";
@@ -27,10 +28,8 @@ export default function MockTestInspect() {
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
   const interviewDocRef = useRef<any>(null);
 
-  const SILENCE_THRESHOLD = 0.008;
-  const SILENCE_TIMEOUT = 60000;
-  const MIN_RECORDING_TIME = 1000;
-  const RECORDING_START_DELAY = 800; // Tăng delay để fix bug câu 1
+  const TIME_PER_QUESTION = 60; // 60 seconds per question
+  const SILENCE_THRESHOLD = 0.012;
 
   const audioChunksRef = useRef<Blob[]>([]);
   const finalTranscriptRef = useRef<string>("");
@@ -52,12 +51,12 @@ export default function MockTestInspect() {
   const [result, setResult] = useState<any>(null);
   const [currentEmotion, setCurrentEmotion] = useState("Neutral");
   const [loadingModels, setLoadingModels] = useState(true);
-  const [countdown, setCountdown] = useState(60);
+  const [countdown, setCountdown] = useState(TIME_PER_QUESTION);
   const [amplitude, setAmplitude] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [stream, setStream] = useState<MediaStream | null>(null);
 
-  // ==================== DYNAMIC IMPORT FACE-API ====================
+  // ==================== LOAD FACE-API ====================
   useEffect(() => {
     let mounted = true;
     import("@vladmandic/face-api").then(async (faceapi) => {
@@ -71,8 +70,6 @@ export default function MockTestInspect() {
         (window as any).faceapi = faceapi;
         setLoadingModels(false);
       }
-    }).catch(() => {
-      if (mounted) setLoadingModels(false);
     });
     return () => { mounted = false; };
   }, []);
@@ -88,7 +85,7 @@ export default function MockTestInspect() {
 
   // ==================== FACE DETECTION ====================
   const startFaceDetection = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || loadingModels || finished) return;
+    if (!videoRef.current || loadingModels || finished) return;
     const faceapi = (window as any).faceapi;
     if (!faceapi) return;
 
@@ -100,68 +97,42 @@ export default function MockTestInspect() {
           new faceapi.TinyFaceDetectorOptions()
         ).withFaceLandmarks().withFaceExpressions();
 
-        const canvas = canvasRef.current!;
-        const ctx = canvas.getContext("2d")!;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
         if (detections.length > 0) {
-          const displaySize = { width: 640, height: 480 };
-          const resized = faceapi.resizeResults(detections, displaySize);
-          faceapi.draw.drawDetections(canvas, resized);
-          faceapi.draw.drawFaceLandmarks(canvas, resized);
-
           const expr = detections[0].expressions;
           const dominant = Object.keys(expr).reduce((a: any, b: any) => expr[a] > expr[b] ? a : b);
           setCurrentEmotion(dominant.charAt(0).toUpperCase() + dominant.slice(1));
         }
-
         faceDetectRaf.current = requestAnimationFrame(detect);
       } catch {}
     };
     faceDetectRaf.current = requestAnimationFrame(detect);
   }, [finished, loadingModels]);
 
-  // ==================== TTS + BEEP ====================
+  // ==================== SPEAK QUESTION ====================
   const speak = async (text: string) => {
-    try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        body: JSON.stringify({ text }),
-        headers: { "Content-Type": "application/json" }
-      });
-      if (res.ok) {
-        const { audioContent } = await res.json();
-        const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
-        await new Promise(r => { audio.onended = r; audio.play().catch(() => r); });
-      }
-    } catch {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = "en-US";
-      speechSynthesis.speak(utter);
-      await new Promise(r => utter.onend = r);
-    }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "en-US";
+    utter.rate = 0.9;
+    speechSynthesis.speak(utter);
+    await new Promise(resolve => utter.onend = resolve);
   };
 
   const playBeep = () => {
-    try {
-      const ctx = new AudioContext();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = 1000;
-      g.gain.value = 0.15;
-      o.connect(g);
-      g.connect(ctx.destination);
-      o.start();
-      setTimeout(() => o.stop(), 120);
-    } catch {}
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 900;
+    g.gain.value = 0.2;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.1);
   };
 
   // ==================== START INTERVIEW ====================
   const handleStart = async () => {
-    if (started) return;
     setIsLoading(true);
-
     try {
       const s = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: "user" },
@@ -174,7 +145,7 @@ export default function MockTestInspect() {
         videoRef.current.play();
       }
 
-      const docRef = await addDoc(collection(db, "prointerviews"), {  // ĐÃ ĐỔI THÀNH prointerviews
+      const docRef = await addDoc(collection(db, "prointerviews"), {
         userId: auth.currentUser?.uid || "guest",
         level, role, questions,
         answers: [], emotionLog: [], result: null,
@@ -184,9 +155,16 @@ export default function MockTestInspect() {
 
       setStarted(true);
       setIsLoading(false);
-      setTimeout(() => startQuestion(0), 1000);
+
+      // Start first question immediately
+      startQuestion(0);
     } catch (err) {
-      toast({ title: "Cần cấp quyền Camera & Mic!", status: "error", duration: 5000 });
+      toast({
+        title: "Permission Denied",
+        description: "Please allow camera and microphone access.",
+        status: "error",
+        duration: 8000
+      });
       setIsLoading(false);
     }
   };
@@ -199,33 +177,33 @@ export default function MockTestInspect() {
     }
 
     setCurrentQ(idx);
-    setCountdown(60);
+    setCountdown(TIME_PER_QUESTION);
     setLiveTranscript("");
     finalTranscriptRef.current = "";
-    setRecording(false);
+    setRecording(true);
     setAmplitude(0);
 
     await speak(questions[idx]);
     playBeep();
 
-    // FIX BUG CÂU 1: Đợi chắc chắn rồi mới bắt đầu record
-    setTimeout(() => {
-      if (!finished) {
-        setRecording(true);
-        startRecording();
-      }
-    }, RECORDING_START_DELAY);
-  };
-
-  // ==================== START RECORDING ====================
-  const startRecording = () => {
-    if (!stream || !recording) return;
-
     recordingStartTimeRef.current = Date.now();
     lastSpokenAtRef.current = Date.now();
-    audioChunksRef.current = [];
-    finalTranscriptRef.current = "";
 
+    startRecording(stream!);
+
+    // Auto countdown 60s
+    countdownInterval.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
+      const remain = Math.max(TIME_PER_QUESTION - elapsed, 0);
+      setCountdown(remain);
+      if (remain <= 0) {
+        stopRecording();
+      }
+    }, 100);
+  };
+
+  // ==================== RECORDING ENGINE ====================
+  const startRecording = (stream: MediaStream) => {
     // Speech Recognition
     if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -237,9 +215,9 @@ export default function MockTestInspect() {
       rec.onresult = (e: any) => {
         let final = "", interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript.trim();
-          if (e.results[i].isFinal) final += t + " ";
-          else interim += t;
+          const transcript = e.results[i][0].transcript;
+          if (e.results[i].isFinal) final += transcript + " ";
+          else interim += transcript;
         }
         if (final) {
           finalTranscriptRef.current += final;
@@ -248,76 +226,57 @@ export default function MockTestInspect() {
         setLiveTranscript(finalTranscriptRef.current + interim);
       };
 
-      rec.onerror = () => toast({ title: "Mic bị chặn", status: "error" });
+      rec.onerror = (e: any) => console.warn("STT Error:", e.error);
       rec.onend = () => { if (recording) rec.start(); };
-
-      try { rec.start(); recognitionRef.current = rec; } catch {}
+      rec.start();
+      recognitionRef.current = rec;
     }
 
-    // MediaRecorder
+    // Audio Analyzer (Waveform)
     try {
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      recorder.ondataavailable = (e) => e.data.size > 0 && audioChunksRef.current.push(e.data);
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-    } catch (err) { console.warn("MediaRecorder failed"); }
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      audioContextRef.current = ctx;
 
-    // Amplitude monitoring
-    const ctx = new AudioContext();
-    const source = ctx.createMediaStreamSource(stream);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    audioContextRef.current = ctx;
-    analyserRef.current = analyser;
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    const monitor = () => {
-      if (!recording || finished) return;
-      analyser.getByteTimeDomainData(dataArray);
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += Math.pow((dataArray[i] - 128) / 128, 2);
-      }
-      const rms = Math.sqrt(sum / dataArray.length);
-      setAmplitude(rms);
-      if (rms > SILENCE_THRESHOLD) lastSpokenAtRef.current = Date.now();
-
-      const elapsed = Date.now() - recordingStartTimeRef.current;
-      if (elapsed > MIN_RECORDING_TIME && Date.now() - lastSpokenAtRef.current > SILENCE_TIMEOUT) {
-        stopRecording();
-        return;
-      }
-
-      monitorRaf.current = requestAnimationFrame(monitor);
-    };
-    monitor();
-
-    // Countdown
-    countdownInterval.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
-      const remain = Math.max(60 - elapsed, 0);
-      setCountdown(remain);
-      if (remain <= 0) stopRecording();
-    }, 100);
+      const monitor = () => {
+        if (!recording || finished) return;
+        analyser.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += Math.pow((dataArray[i] - 128) / 128, 2);
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        setAmplitude(rms);
+        if (rms > SILENCE_THRESHOLD) lastSpokenAtRef.current = Date.now();
+        monitorRaf.current = requestAnimationFrame(monitor);
+      };
+      monitor();
+    } catch (err) {}
   };
 
-  // ==================== STOP RECORDING ====================
+  // ==================== STOP & SAVE ANSWER ====================
   const stopRecording = async () => {
     if (!recording) return;
     setRecording(false);
 
     clearInterval(countdownInterval.current!);
     if (monitorRaf.current) cancelAnimationFrame(monitorRaf.current);
-    if (recognitionRef.current) recognitionRef.current.stop();
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    if (audioContextRef.current) audioContextRef.current.close();
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
 
-    const text = finalTranscriptRef.current.trim() || "(Không trả lời)";
-    const newAnswers = [...answers, text];
+    const answer = finalTranscriptRef.current.trim() || "(No answer recorded)";
+    const newAnswers = [...answers, answer];
     setAnswers(newAnswers);
     setEmotionLog(prev => [...prev, currentEmotion]);
 
@@ -329,10 +288,15 @@ export default function MockTestInspect() {
       });
     }
 
-    setTimeout(() => startQuestion(currentQ + 1), 1000);
+    // Next question or finish
+    if (currentQ + 1 < questions.length) {
+      setTimeout(() => startQuestion(currentQ + 1), 1200);
+    } else {
+      finishInterview();
+    }
   };
 
-  // ==================== FINISH ====================
+  // ==================== FINISH INTERVIEW ====================
   const finishInterview = async () => {
     setFinished(true);
     setRecording(false);
@@ -359,10 +323,10 @@ export default function MockTestInspect() {
       }
 
       if (data.score >= 7) {
-        confetti({ particleCount: 800, spread: 100, origin: { y: 0.6 } });
+        confetti({ particleCount: 1200, spread: 100, origin: { y: 0.6 } });
       }
     } catch (err) {
-      toast({ title: "Lỗi đánh giá", status: "error" });
+      toast({ title: "Evaluation failed", status: "error" });
     } finally {
       setIsLoading(false);
     }
@@ -375,11 +339,9 @@ export default function MockTestInspect() {
   useEffect(() => {
     return () => {
       stream?.getTracks().forEach(t => t.stop());
-      recognitionRef.current?.stop();
-      mediaRecorderRef.current?.stop();
-      cancelAnimationFrame(faceDetectRaf.current!);
-      cancelAnimationFrame(monitorRaf.current!);
       clearInterval(countdownInterval.current!);
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (monitorRaf.current) cancelAnimationFrame(monitorRaf.current);
     };
   }, []);
 
@@ -388,7 +350,7 @@ export default function MockTestInspect() {
     return (
       <Center minH="100vh" bg="gray.50" flexDir="column">
         <Spinner size="xl" color="teal.500" thickness="6px" />
-        <Text mt={6} fontSize="2xl" fontWeight="bold">Đang tải AI Pro...</Text>
+        <Text mt={6} fontSize="2xl" fontWeight="bold">Loading AI Interview Pro...</Text>
       </Center>
     );
   }
@@ -398,7 +360,7 @@ export default function MockTestInspect() {
       <Flex align="center" justify="space-between" p={6} bg="white" shadow="lg">
         <HStack>
           <Image src="/logo.png" boxSize="50px" borderRadius="full" />
-          <Text fontSize="3xl" fontWeight="extrabold" color="teal.600">AI-Interview Pro</Text>
+          <Text fontSize="3xl" fontWeight="extrabold" color="teal.600">AI Interview Pro</Text>
         </HStack>
         <Badge colorScheme="teal" fontSize="lg" px={6} py={3} borderRadius="full">{level} • {role}</Badge>
       </Flex>
@@ -423,10 +385,10 @@ export default function MockTestInspect() {
 
           <Box p={8} bg="white" rounded="3xl" shadow="2xl" w="full">
             <Text textAlign="center" fontSize="lg" color="gray.600">
-              Question {currentQ + 1} / {questions.length}
+              Question {currentQ + 1} of {questions.length}
             </Text>
             <Text textAlign="center" fontSize="3xl" fontWeight="bold" mt={4} lineHeight="1.6">
-              {questions[currentQ] || "Đang tải câu hỏi..."}
+              {questions[currentQ]}
             </Text>
 
             {recording && (
@@ -434,63 +396,78 @@ export default function MockTestInspect() {
                 <HStack spacing={6}>
                   <FaMicrophone size={40} color="red" className="animate-pulse" />
                   <Text color="red.600" fontWeight="bold" fontSize="5xl">
-                    Recording... {countdown}s
+                    {countdown}s
                   </Text>
                 </HStack>
 
-                <Box w="500px" h="120px" bg="gray.100" rounded="full" overflow="hidden" position="relative" shadow="xl">
+                <Box w="600px" h="140px" bg="gray.100" rounded="full" overflow="hidden" position="relative" shadow="2xl">
                   <Box
                     position="absolute" top="0" left="0" right="0" bottom="0"
                     bgGradient="linear(to-r, teal.400, cyan.500)"
                     opacity="0.9"
-                    width={`${Math.min(amplitude * 800, 100)}%`}
+                    width={`${Math.min(amplitude * 1200, 100)}%`}
                     transition="width 0.05s ease-out"
                   />
                   <Center h="full">
-                    <Text fontSize="4xl" fontWeight="black" color="white" textShadow="2px 2px 10px rgba(0,0,0,0.5)">
-                      {amplitude > 0.01 ? "Đang nói..." : "Hãy trả lời..."}
+                    <Text fontSize="5xl" fontWeight="black" color="white" textShadow="3px 3px 15px rgba(0,0,0,0.6)">
+                      {amplitude > 0.012 ? "Speaking..." : "Start speaking..."}
                     </Text>
                   </Center>
                 </Box>
 
                 {liveTranscript && (
-                  <Box p={5} bg="teal.50" rounded="2xl" maxW="700px" border="4px dashed" borderColor="teal.300">
+                  <Box p={5} bg="teal.50" rounded="2xl" maxW="800px" border="4px dashed" borderColor="teal.300">
                     <Text fontSize="xl" color="teal.800" textAlign="center" fontStyle="italic">
                       "{liveTranscript}"
                     </Text>
                   </Box>
                 )}
 
-                <IconButton
-                  aria-label="Next"
-                  icon={<FaArrowRight />}
+                <Button
+                  onClick={stopRecording}
+                  rightIcon={<FaArrowRight />}
                   size="lg"
                   colorScheme="teal"
+                  fontSize="xl"
+                  px={12}
+                  py={8}
                   rounded="full"
-                  onClick={stopRecording}
-                  boxShadow="lg"
-                  _hover={{ transform: "scale(1.2)" }}
-                />
+                  boxShadow="2xl"
+                  _hover={{ transform: "scale(1.1)" }}
+                >
+                  Next Question
+                </Button>
               </VStack>
             )}
           </Box>
 
           {!started && (
-            <Button onClick={handleStart} isLoading={isLoading} leftIcon={<FaPlay />} size="lg" colorScheme="teal" px={40} py={10} fontSize="3xl" fontWeight="bold" borderRadius="full" boxShadow="2xl">
-              BẮT ĐẦU PHỎNG VẤN
+            <Button
+              onClick={handleStart}
+              isLoading={isLoading}
+              leftIcon={<FaPlay />}
+              size="lg"
+              colorScheme="teal"
+              px={40} py={10}
+              fontSize="3xl"
+              fontWeight="bold"
+              borderRadius="full"
+              boxShadow="2xl"
+            >
+              START INTERVIEW
             </Button>
           )}
         </VStack>
 
+        {/* Result Panel */}
         <Box flex="1" bg="white" rounded="3xl" shadow="2xl" p={8}>
           <Tabs variant="soft-rounded" colorScheme="teal">
             <TabList>
-              <Tab fontWeight="bold">Kết quả</Tab>
-              <Tab fontWeight="bold">Cảm xúc</Tab>
-              <Tab fontWeight="bold">Gợi ý AI</Tab>
+              <Tab fontWeight="bold">Result</Tab>
+              <Tab fontWeight="bold">Emotion</Tab>
+              <Tab fontWeight="bold">AI Feedback</Tab>
             </TabList>
             <TabPanels mt={6}>
-              {/* TAB KẾT QUẢ CHI TIẾT */}
               <TabPanel>
                 {result ? (
                   <VStack spacing={6} align="stretch">
@@ -501,41 +478,38 @@ export default function MockTestInspect() {
                     </Center>
                     <Center>
                       <Text fontSize="5xl" fontWeight="bold" color={result.score >= 7 ? "green.500" : "red.500"}>
-                        {result.score >= 7 ? "CHÚC MỪNG BẠN ĐẬU!" : "CẦN CẢI THIỆN THÊM"}
+                        {result.score >= 7 ? "PASSED!" : "NEED IMPROVEMENT"}
                       </Text>
                     </Center>
 
-                    <Text fontWeight="bold" fontSize="2xl" textAlign="center" color="gray.700">
-                      Chi tiết điểm từng câu
-                    </Text>
-
-                    <VStack spacing={4} align="stretch">
+                    <Text fontWeight="bold" fontSize="2xl" textAlign="center">Score per Question</Text>
+                    <VStack spacing={4}>
                       {questions.map((q: string, i: number) => (
                         <Box key={i} p={4} bg="gray.50" rounded="xl" border="2px" borderColor="teal.200">
                           <HStack justify="space-between" mb={2}>
-                            <Text fontWeight="bold">Câu {i + 1}:</Text>
+                            <Text fontWeight="bold">Q{i + 1}:</Text>
                             <Badge colorScheme={result.perQuestionScores[i] >= 7 ? "green" : "orange"} fontSize="lg">
                               {result.perQuestionScores[i]}/10
                             </Badge>
                           </HStack>
                           <Text fontSize="sm" color="gray.600" noOfLines={2}>{q}</Text>
                           <Text fontSize="sm" color="gray.500" mt={2} fontStyle="italic">
-                            Trả lời: {answers[i] || "(Không trả lời)"}
+                            Answer: {answers[i] || "(No answer)"}
                           </Text>
                           <Text fontSize="sm" color="teal.600" mt={2}>
-                            Nhận xét: {result.perQuestionFeedback[i]}
+                            Feedback: {result.perQuestionFeedback[i]}
                           </Text>
                         </Box>
                       ))}
                     </VStack>
                   </VStack>
                 ) : (
-                  <Text color="gray.500" textAlign="center">Đang phỏng vấn...</Text>
+                  <Text color="gray.500" textAlign="center">Interview in progress...</Text>
                 )}
               </TabPanel>
 
               <TabPanel>
-                <Text fontWeight="bold" fontSize="2xl" mb={4}>Cảm xúc hiện tại: {currentEmotion}</Text>
+                <Text fontWeight="bold" fontSize="2xl" mb={4}>Current Emotion: {currentEmotion}</Text>
                 <VStack align="start">
                   {emotionLog.map((e, i) => (
                     <Text key={i}>Q{i + 1}: {e}</Text>
@@ -545,9 +519,9 @@ export default function MockTestInspect() {
 
               <TabPanel>
                 {result?.suggestion ? (
-                  <Text whiteSpace="pre-wrap" fontSize="md">{result.suggestion}</Text>
+                  <Text whiteSpace="pre-wrap" fontSize="md" lineHeight="1.8">{result.suggestion}</Text>
                 ) : (
-                  <Text color="gray.500">Hoàn thành để xem gợi ý AI</Text>
+                  <Text color="gray.500">Complete the interview to see AI suggestions</Text>
                 )}
               </TabPanel>
             </TabPanels>
