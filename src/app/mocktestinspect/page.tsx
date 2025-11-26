@@ -28,7 +28,7 @@ export default function MockTestInspect() {
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
   const interviewDocRef = useRef<any>(null);
 
-  const TIME_PER_QUESTION = 60; // 60 seconds per question
+  const TIME_PER_QUESTION = 60;
   const SILENCE_THRESHOLD = 0.012;
 
   const audioChunksRef = useRef<Blob[]>([]);
@@ -108,7 +108,7 @@ export default function MockTestInspect() {
     faceDetectRaf.current = requestAnimationFrame(detect);
   }, [finished, loadingModels]);
 
-  // ==================== SPEAK QUESTION ====================
+  // ==================== SPEAK & BEEP ====================
   const speak = async (text: string) => {
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "en-US";
@@ -155,8 +155,6 @@ export default function MockTestInspect() {
 
       setStarted(true);
       setIsLoading(false);
-
-      // Start first question immediately
       startQuestion(0);
     } catch (err) {
       toast({
@@ -191,20 +189,24 @@ export default function MockTestInspect() {
 
     startRecording(stream!);
 
-    // Auto countdown 60s
+    // COUNTDOWN ĐẢM BẢO TỰ ĐỘNG NEXT
+    if (countdownInterval.current) clearInterval(countdownInterval.current);
     countdownInterval.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
       const remain = Math.max(TIME_PER_QUESTION - elapsed, 0);
       setCountdown(remain);
+
       if (remain <= 0) {
+        clearInterval(countdownInterval.current!);
+        countdownInterval.current = null;
         stopRecording();
       }
-    }, 100);
+    }, 200);
   };
 
-  // ==================== RECORDING ENGINE ====================
+  // ==================== RECORDING ENGINE - FIXED 100% ====================
   const startRecording = (stream: MediaStream) => {
-    // Speech Recognition
+    // 1. Speech Recognition
     if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const rec = new SpeechRecognition();
@@ -215,66 +217,94 @@ export default function MockTestInspect() {
       rec.onresult = (e: any) => {
         let final = "", interim = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
-          const transcript = e.results[i][0].transcript;
+          const transcript = e.results[i][0].transcript.trim();
           if (e.results[i].isFinal) final += transcript + " ";
           else interim += transcript;
         }
         if (final) {
-          finalTranscriptRef.current += final;
+          finalTranscriptRef.current += final + " ";
           lastSpokenAtRef.current = Date.now();
         }
         setLiveTranscript(finalTranscriptRef.current + interim);
       };
 
-      rec.onerror = (e: any) => console.warn("STT Error:", e.error);
-      rec.onend = () => { if (recording) rec.start(); };
+      rec.onerror = (e: any) => {
+        console.warn("STT Error:", e.error);
+        if (e.error === "not-allowed" || e.error === "aborted") {
+          rec.stop();
+        }
+      };
+
       rec.start();
       recognitionRef.current = rec;
     }
 
-    // Audio Analyzer (Waveform)
+    // 2. Audio Analyzer
     try {
-      const ctx = new AudioContext();
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
+
       audioContextRef.current = ctx;
+      analyserRef.current = analyser;
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
       const monitor = () => {
         if (!recording || finished) return;
+
         analyser.getByteTimeDomainData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          sum += Math.pow((dataArray[i] - 128) / 128, 2);
+          const v = (dataArray[i] - 128) / 128;
+          sum += v * v;
         }
         const rms = Math.sqrt(sum / dataArray.length);
         setAmplitude(rms);
         if (rms > SILENCE_THRESHOLD) lastSpokenAtRef.current = Date.now();
+
         monitorRaf.current = requestAnimationFrame(monitor);
       };
-      monitor();
-    } catch (err) {}
+      monitorRaf.current = requestAnimationFrame(monitor);
+    } catch (err) {
+      console.error("AudioContext error:", err);
+    }
   };
 
-  // ==================== STOP & SAVE ANSWER ====================
+  // ==================== STOP RECORDING - CLEANUP TRIỆT ĐỂ ====================
   const stopRecording = async () => {
     if (!recording) return;
     setRecording(false);
 
-    clearInterval(countdownInterval.current!);
-    if (monitorRaf.current) cancelAnimationFrame(monitorRaf.current);
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
+    // 1. Clear countdown
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+      countdownInterval.current = null;
     }
 
+    // 2. Speech Recognition
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.onerror = null;
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
+    }
+
+    // 3. Audio Analyzer
+    if (monitorRaf.current) {
+      cancelAnimationFrame(monitorRaf.current);
+      monitorRaf.current = null;
+    }
+    if (audioContextRef.current) {
+      await audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+
+    // 4. Save answer
     const answer = finalTranscriptRef.current.trim() || "(No answer recorded)";
     const newAnswers = [...answers, answer];
     setAnswers(newAnswers);
@@ -288,9 +318,9 @@ export default function MockTestInspect() {
       });
     }
 
-    // Next question or finish
+    // 5. Next or finish
     if (currentQ + 1 < questions.length) {
-      setTimeout(() => startQuestion(currentQ + 1), 1200);
+      setTimeout(() => startQuestion(currentQ + 1), 1500);
     } else {
       finishInterview();
     }
@@ -303,7 +333,7 @@ export default function MockTestInspect() {
     setIsLoading(true);
 
     stream?.getTracks().forEach(t => t.stop());
-    cancelAnimationFrame(faceDetectRaf.current!);
+    if (faceDetectRaf.current) cancelAnimationFrame(faceDetectRaf.current);
 
     try {
       const res = await fetch("/api/evaluate", {
@@ -332,16 +362,19 @@ export default function MockTestInspect() {
     }
   };
 
+  // Start face detection when ready
   useEffect(() => {
     if (started && !loadingModels) startFaceDetection();
   }, [started, loadingModels, startFaceDetection]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stream?.getTracks().forEach(t => t.stop());
-      clearInterval(countdownInterval.current!);
+      if (countdownInterval.current) clearInterval(countdownInterval.current);
       if (recognitionRef.current) recognitionRef.current.stop();
       if (monitorRaf.current) cancelAnimationFrame(monitorRaf.current);
+      if (faceDetectRaf.current) cancelAnimationFrame(faceDetectRaf.current);
     };
   }, []);
 
@@ -357,17 +390,9 @@ export default function MockTestInspect() {
 
   return (
     <Box minH="100vh" bg="gray.50">
-      <Flex
-        as="header"
-        align="center"
-        justify="space-between"
-        p={4}
-        bg="white"
-        shadow="lg"
-        cursor="pointer"
-        onClick={() => router.push("/auth/dashboard")}
-        _hover={{ shadow: "xl" }}
-      >
+      {/* Header */}
+      <Flex as="header" align="center" justify="space-between" p={4} bg="white" shadow="lg" cursor="pointer"
+        onClick={() => router.push("/auth/dashboard")} _hover={{ shadow: "xl" }}>
         <HStack spacing={3}>
           <Image src="/logo.png" boxSize={{ base: "40px", md: "50px" }} borderRadius="full" />
           <Text fontSize={{ base: "xl", md: "3xl" }} fontWeight="extrabold" color="teal.600">
@@ -380,7 +405,9 @@ export default function MockTestInspect() {
       </Flex>
 
       <Flex direction={{ base: "column", lg: "row" }} gap={10} p={8}>
+        {/* Main Area */}
         <VStack flex="3" spacing={8}>
+          {/* Progress Circles */}
           <HStack spacing={4} flexWrap="wrap" justify="center">
             {questions.map((_, i) => (
               <React.Fragment key={i}>
@@ -392,11 +419,13 @@ export default function MockTestInspect() {
             ))}
           </HStack>
 
+          {/* Video */}
           <Box position="relative" w="640px" h="480px" bg="black" rounded="3xl" overflow="hidden" shadow="2xl">
             <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover" />
             <canvas ref={canvasRef} width={640} height={480} className="absolute top-0 left-0" />
           </Box>
 
+          {/* Question Card */}
           <Box p={8} bg="white" rounded="3xl" shadow="2xl" w="full">
             <Text textAlign="center" fontSize="lg" color="gray.600">
               Question {currentQ + 1} of {questions.length}
@@ -414,6 +443,7 @@ export default function MockTestInspect() {
                   </Text>
                 </HStack>
 
+                {/* Waveform */}
                 <Box w="600px" h="140px" bg="gray.100" rounded="full" overflow="hidden" position="relative" shadow="2xl">
                   <Box
                     position="absolute" top="0" left="0" right="0" bottom="0"
