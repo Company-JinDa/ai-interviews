@@ -17,6 +17,12 @@ import {
   Spinner,
   useColorMode,
   IconButton,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalBody,
+  ModalCloseButton,
+  useDisclosure,
 } from "@chakra-ui/react"
 import { ChevronDownIcon, MoonIcon, SunIcon } from "@chakra-ui/icons"
 import { FaHome, FaBicycle, FaRegFileAlt, FaUser, FaGlobe } from "react-icons/fa"
@@ -49,8 +55,24 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const { lang, toggleLang } = useLang()
   const t = translations[lang]
-
   const { colorMode, toggleColorMode } = useColorMode()
+
+  // Modal state cho ảnh to
+  const { isOpen, onOpen, onClose } = useDisclosure()
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+
+  // Danh sách ảnh feature (bạn có thể thêm bao nhiêu tùy thích)
+  const featureImages = [
+    "/f1.png",
+    "/f2.png",
+    "/f3.png",
+    "/f4.png",
+    "/f5.png",
+    "/f6.png", // thêm thoải mái ở đây
+    "/f7.png",
+    "/f8.png",
+    // ...
+  ]
 
   useEffect(() => {
     setContributions(generateData(year))
@@ -90,6 +112,7 @@ export default function DashboardPage() {
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
+      {/* Sidebar */}
       <Box
         w="250px"
         borderRight="1px solid"
@@ -184,7 +207,7 @@ export default function DashboardPage() {
         </Box>
       </Box>
 
-      {/* Content */}
+      {/* Main Content */}
       <Box flex="1" p={6} bg={colorMode === "light" ? "gray.50" : "gray.800"} overflow="auto">
         {/* Top Section */}
         <Flex justify="space-between" align="start" mb={8}>
@@ -199,7 +222,6 @@ export default function DashboardPage() {
 
           <Box>
             <Flex justify="flex-end" mb={2} gap={2}>
-              {/* Select year */}
               <Select
                 size="sm"
                 w="100px"
@@ -214,7 +236,6 @@ export default function DashboardPage() {
                 {lang === "en" ? "EN" : "VI"}
               </Button>
 
-              {/* 🌙 Nút dark/light mode */}
               <IconButton
                 size="sm"
                 aria-label="Toggle Dark Mode"
@@ -223,6 +244,7 @@ export default function DashboardPage() {
               />
             </Flex>
 
+            {/* Contribution Graph */}
             <Flex direction="row" gap={2}>
               {t.months.map((month: string, mIdx: number) => (
                 <Box key={mIdx}>
@@ -256,6 +278,7 @@ export default function DashboardPage() {
           </Box>
         </Flex>
 
+        {/* Feature Section */}
         <Flex direction="column" align="center" mt={150}>
           <Flex align="center" mb={65} w="full" justify="center">
             <Divider flex="1" borderWidth="2px" />
@@ -265,8 +288,9 @@ export default function DashboardPage() {
             <Divider flex="1" borderWidth="2px" />
           </Flex>
 
+          {/* Danh sách ảnh feature – click để zoom */}
           <Flex justify="center" gap={6} wrap="wrap">
-            {["/f1.png", "/f2.png", "/f3.png", "/f4.png", "/f5.png"].map((src, i) => (
+            {featureImages.map((src, i) => (
               <Box
                 key={i}
                 w="200px"
@@ -275,16 +299,56 @@ export default function DashboardPage() {
                 border="10px solid"
                 borderColor="gray.300"
                 borderRadius="md"
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
                 overflow="hidden"
+                cursor="pointer"
+                transition="all 0.3s"
+                _hover={{
+                  transform: "scale(1.05)",
+                  boxShadow: "xl",
+                }}
+                onClick={() => {
+                  setSelectedImage(src)
+                  onOpen()
+                }}
               >
-                <Image src={src} alt={`Feature ${i + 1}`} objectFit="cover" w="100%" h="100%" />
+                <Image
+                  src={src}
+                  alt={`Feature ${i + 1}`}
+                  objectFit="cover"
+                  w="100%"
+                  h="100%"
+                  transition="0.3s"
+                />
               </Box>
             ))}
           </Flex>
         </Flex>
+
+        {/* Modal Lightbox – hiện ảnh to */}
+        <Modal isOpen={isOpen} onClose={onClose} size="full" isCentered>
+          <ModalOverlay bg="blackAlpha.900" backdropFilter="blur(10px)" />
+          <ModalContent bg="transparent" boxShadow="none">
+            <ModalCloseButton
+              color="white"
+              size="lg"
+              zIndex="tooltip"
+              _hover={{ bg: "whiteAlpha.300" }}
+            />
+            <ModalBody p={0} display="flex" justifyContent="center" alignItems="center">
+              {selectedImage && (
+                <Image
+                  src={selectedImage}
+                  alt="Zoomed feature"
+                  maxW="90vw"
+                  maxH="90vh"
+                  objectFit="contain"
+                  borderRadius="lg"
+                  boxShadow="0 0 50px rgba(0,0,0,0.8)"
+                />
+              )}
+            </ModalBody>
+          </ModalContent>
+        </Modal>
       </Box>
     </Flex>
   )
