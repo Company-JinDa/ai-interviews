@@ -135,7 +135,6 @@ export default function PackageCompany() {
           </Button>
         </Box>
 
-        {/* Gói 6 tháng */}
         <Box
           border="1px solid"
           borderColor="blue.200"
