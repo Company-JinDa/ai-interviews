@@ -134,7 +134,6 @@ export default function PackageCompany() {
             {t.packages.buyVip}
           </Button>
         </Box>
-
         <Box
           border="1px solid"
           borderColor="blue.200"

@@ -123,7 +123,6 @@ function PurchaseCompanyContent() {
         <Box mb={4}>
           <Image src={qr} alt="QR Code SePay" width={200} height={200} mx="auto" />
         </Box>
-
         {/* Nội dung chuyển khoản */}
         <VStack spacing={2} mb={4}>
           <Text fontWeight="bold">Nội dung chuyển khoản:</Text>
