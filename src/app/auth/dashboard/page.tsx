@@ -28,7 +28,6 @@ import { useEffect, useState } from "react"
 import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
 
-// Lightbox
 import Lightbox from "yet-another-react-lightbox"
 import "yet-another-react-lightbox/styles.css"
 import "yet-another-react-lightbox/plugins/thumbnails.css"
@@ -57,19 +56,16 @@ export default function DashboardPage() {
   const [open, setOpen] = useState(false)
   const [index, setIndex] = useState(0)
 
-  // 5 ảnh chính - nằm 1 hàng, không click
   const mainFeatures = ["/f1.png", "/f2.png", "/f3.png", "/f4.png", "/f5.png"]
 
-  // Ảnh gallery - sẽ được chia 2 cột chồng lên nhau
   const galleryImages = [
-    "/f6.png", "/f7.png", "/f8.png",   // cột trái
-    "/f9.png", "/f10.png", "/f11.png", // cột phải
-    "/f12.png", "/f13.png", "/f14.png",
-    "/f15.png", "/f16.png", "/f17.png",
-    // Thêm bao nhiêu cũng được → tự động chia cột
+    "/f6.png", "/f7.png", "/f8.png",
+    "/f9.png", "/f10.png", "/f11.png",
   ]
 
-  // Tạo slides cho lightbox
+  const leftColumn = galleryImages.filter((_, i) => i % 2 === 0)
+  const rightColumn = galleryImages.filter((_, i) => i % 2 === 1)
+
   const lightboxSlides = galleryImages.map(src => ({ src }))
 
   useEffect(() => setContributions(generateData(year)), [year])
@@ -80,9 +76,7 @@ export default function DashboardPage() {
         const userRef = doc(db, "users", user.uid)
         const snap = await getDoc(userRef)
         setRole(snap.exists() ? snap.data()?.role || "candidate" : "candidate")
-      } else {
-        router.push("/auth/login")
-      }
+      } else router.push("/auth/login")
       setLoading(false)
     })
     return () => unsubscribe()
@@ -97,24 +91,21 @@ export default function DashboardPage() {
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
-      {/* Sidebar - giữ nguyên */}
-      <Box w="250px" borderRight="1px solid" borderColor="gray.300" p={4} display="flex" flexDirection="column">
-        <Flex align="center" mb={6} gap={3}>
+      {/* Sidebar - giữ nguyên đẹp */}
+      <Box w="250px" borderRight="1px solid" borderColor="gray.300" p={4} flexDirection="column" display="flex">
+        <Flex align="center" gap={3} mb={8}>
           <Image src="/logo.png" alt="logo" boxSize="50px" borderRadius="full" />
           <Text fontSize="2xl" fontWeight="bold">AI-Interview</Text>
         </Flex>
-
         <VStack align="start" spacing={4} fontSize="lg" mb="auto">
           <Button as={Link} href="/auth/dashboard" variant="ghost" leftIcon={<FaHome />} justifyContent="flex-start" w="full" color="blue.500">{t.home}</Button>
           <Button as={Link} href="/components/specialized" variant="ghost" leftIcon={<FaBicycle />} justifyContent="flex-start" w="full">{t.specialized}</Button>
           <Button as={Link} href="/components/mocktest" variant="ghost" leftIcon={<FaRegFileAlt />} justifyContent="flex-start" w="full">{t.mocktest}</Button>
           {role === "company" && <Button as={Link} href="/manager/manage" variant="ghost" leftIcon={<FaUser />} justifyContent="flex-start" w="full">{t.manager}</Button>}
         </VStack>
-
-        <Button as={Link} href="/components/packageCompany" variant="ghost" justifyContent="flex-start" w="full" mb={2}>{t.premium}</Button>
-
+        <Button as={Link} href="/components/packageCompany" variant="ghost" justifyContent="flex-start" w="full" mb={3}>{t.premium}</Button>
         <Menu>
-          <MenuButton as={Button} leftIcon={<FaUser />} rightIcon={<ChevronDownIcon />} w="full" justifyContent="space-between">{t.account}</MenuButton>
+          <MenuButton as={Button} leftIcon={<FaUser />} rightIcon={<ChevronDownIcon />} w="full">{t.account}</MenuButton>
           <MenuList>
             <MenuItem as={Link} href="/components/profile">{t.profile}</MenuItem>
             <MenuItem onClick={handleLogout}>{t.logout}</MenuItem>
@@ -125,32 +116,31 @@ export default function DashboardPage() {
       {/* Main Content */}
       <Box flex="1" p={6} bg={colorMode === "light" ? "gray.50" : "gray.800"} overflow="auto">
         {/* Header + Contribution */}
-        <Flex justify="space-between" align="start" mb={8}>
+        <Flex justify="space-between" align="start" mb={10}>
           <Box maxW="lg">
             <Text fontSize="2xl" fontWeight="bold" mb={2}>{t.practiceTitle}</Text>
-            <Text color={colorMode === "light" ? "gray.600" : "gray.300"}>{t.practiceDesc}</Text>
+            <Text color="gray.600" _dark={{ color: "gray.300" }}>{t.practiceDesc}</Text>
           </Box>
           <Box>
-            <Flex justify="flex-end" mb={2} gap={2}>
+            <Flex justify="flex-end" gap={3} mb={3}>
               <Select size="sm" w="100px" value={year} onChange={e => setYear(Number(e.target.value))}>
                 <option value={2025}>2025</option>
                 <option value={2026}>2026</option>
               </Select>
-              <Button size="sm" leftIcon={<FaGlobe />} onClick={toggleLang}>{lang === "en" ? "EN" : "VI"}</Button>
-              <IconButton size="sm" aria-label="Toggle Dark Mode" icon={colorMode === "light" ? <MoonIcon /> : <SunIcon />} onClick={toggleColorMode} />
+              <Button size="sm" leftIcon={<FaGlobe />} onClick={toggleLang}>{lang.toUpperCase()}</Button>
+              <IconButton size="sm" aria-label="Dark mode" icon={colorMode === "light" ? <MoonIcon /> : <SunIcon />} onClick={toggleColorMode} />
             </Flex>
-            {/* Contribution graph giữ nguyên */}
+            {/* Contribution graph */}
             <Flex direction="row" gap={2}>
               {t.months.map((month: string, mIdx: number) => (
                 <Box key={mIdx}>
                   <Text fontSize="xs" mb={1} textAlign="center">{month}</Text>
                   <Flex direction="row" gap={1}>
-                    {[0, 1, 2, 3].map((week) => (
-                      <Flex direction="column" gap={1} key={week}>
-                        {Array.from({ length: 7 }).map((_, day) => {
-                          const dateKey = new Date(year, mIdx, week * 7 + day + 1).toISOString().split("T")[0]
-                          const active = contributions[dateKey]
-                          return <Box key={day} w="10px" h="10px" borderRadius="2px" bg={active ? "green.400" : "gray.200"} />
+                    {[0,1,2,3].map(w => (
+                      <Flex direction="column" gap={1} key={w}>
+                        {Array.from({length:7}).map((_, d) => {
+                          const date = new Date(year, mIdx, w*7 + d + 1).toISOString().split("T")[0]
+                          return <Box key={d} w="10px" h="10px" borderRadius="2px" bg={contributions[date] ? "green.400" : "gray.200"} />
                         })}
                       </Flex>
                     ))}
@@ -162,50 +152,56 @@ export default function DashboardPage() {
         </Flex>
 
         {/* 5 ảnh chính */}
-        <Flex direction="column" align="center" mb={20}>
-          <Flex align="center" mb={10} w="full" justify="center">
+        <Box textAlign="center" mb={20}>
+          <Flex align="center" justify="center" mb={10}>
             <Divider flex="1" borderWidth="2px" />
-            <Text mx={4} fontSize="lg" fontWeight="bold">{t.feature}</Text>
+            <Text mx={6} fontSize="lg" fontWeight="bold">{t.feature}</Text>
             <Divider flex="1" borderWidth="2px" />
           </Flex>
-
-          <Flex justify="center" gap={8} flexWrap="wrap" maxW="1400px">
+          <Flex justify="center" gap={{ base: 4, md: 10 }} flexWrap="wrap" maxW="1400px" mx="auto">
             {mainFeatures.map((src, i) => (
-              <Box key={i} w={{ base: "150px", md: "200px" }} h={{ base: "190px", md: "250px" }} border="10px solid" borderColor="gray.300" borderRadius="md" overflow="hidden" boxShadow="lg">
-                <Image src={src} alt={`Feature ${i + 1}`} objectFit="cover" w="100%" h="100%" />
+              <Box key={i} w={{ base: "150px", md: "210px" }} h={{ base: "190px", md: "270px" }}
+                border="12px solid" borderColor="white" borderRadius="xl" overflow="hidden"
+                boxShadow="0 10px 30px rgba(0,0,0,0.15)" transition="all 0.3s"
+                _hover={{ transform: "translateY(-8px)", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+                <Image src={src} alt={`Feature ${i+1}`} objectFit="cover" w="100%" h="100%" />
               </Box>
             ))}
           </Flex>
-        </Flex>
+        </Box>
 
-        {/* Phần chồng ảnh kiểu Messenger */}
         <Box>
-          <Text textAlign="center" fontSize="xl" fontWeight="semibold" mb={10} color="gray.600" _dark={{ color: "gray.300" }}>
-            Xem thêm ảnh chi tiết
+          <Text textAlign="center" fontSize="xl" fontWeight="semibold" mb={12} color="gray.700" _dark={{ color: "gray.200" }}>
+            More Picture Quality
           </Text>
 
-          <Flex justify="center" gap={{ base: 6, md: 12 }} flexWrap="wrap" maxW="1000px" mx="auto">
-            {/* Cột trái */}
-            <Box position="relative" w={{ base: "100%", md: "45%" }} maxW="420px" cursor="pointer">
-              {galleryImages.slice(0, 3).map((src, i) => (
+          <Flex justify="center" gap={{ base: 8, lg: 16 }} maxW="1100px" mx="auto" flexWrap="wrap">
+            <Box position="relative" minH="500px" w={{ base: "100%", md: "48%" }} maxW="460px">
+              {leftColumn.map((src, i) => (
                 <Box
                   key={i}
-                  position={i === 0 ? "relative" : "absolute"}
-                  top={i === 0 ? 0 : `${i * 60}px`}
-                  left={i === 0 ? 0 : `${i * 20}px`}
-                  zIndex={3 - i}
-                  borderRadius="xl"
+                  position="absolute"
+                  top={`${i * 90}px`}
+                  left={`${i * 18}px`}
+                  zIndex={leftColumn.length - i}
+                  borderRadius="2xl"
                   overflow="hidden"
-                  boxShadow="2xl"
-                  transform={i > 0 ? "rotate(-4deg)" : "rotate(0deg)"}
-                  _hover={{ transform: i > 0 ? "rotate(-4deg) scale(1.05)" : "scale(1.03)", zIndex: 10 }}
-                  transition="all 0.3s"
-                  onClick={() => { setIndex(i); setOpen(true) }}
+                  boxShadow="0 15px 35px rgba(0,0,0,0.25)"
+                  transform={i === 0 ? "rotate(0deg)" : `rotate(${i % 2 === 0 ? -6 : 7}deg)`}
+                  transition="all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                  _hover={{
+                    transform: `rotate(0deg) scale(1.08) translateY(-12px)`,
+                    zIndex: 100,
+                    boxShadow: "0 25px 50px rgba(0,0,0,0.4)"
+                  }}
+                  cursor="pointer"
+                  onClick={() => { setIndex(i * 2); setOpen(true) }}
                 >
                   <Image
                     src={src}
-                    alt={`Gallery ${i + 6}`}
-                    w={i === 0 ? "100%" : "85%"}
+                    alt={`Gallery ${i}`}
+                    w={i === 0 ? "100%" : "88%"}
+                    maxW="420px"
                     h="auto"
                     display="block"
                     loading="lazy"
@@ -215,26 +211,32 @@ export default function DashboardPage() {
             </Box>
 
             {/* Cột phải */}
-            <Box position="relative" w={{ base: "100%", md: "45%" }} maxW="420px" cursor="pointer">
-              {galleryImages.slice(3, 6).map((src, i) => (
+            <Box position="relative" minH="500px" w={{ base: "100%", md: "48%" }} maxW="460px">
+              {rightColumn.map((src, i) => (
                 <Box
                   key={i}
-                  position={i === 0 ? "relative" : "absolute"}
-                  top={i === 0 ? 0 : `${i * 60}px`}
-                  right={i === 0 ? 0 : `${i * 20}px`}
-                  zIndex={3 - i}
-                  borderRadius="xl"
+                  position="absolute"
+                  top={`${i * 90}px`}
+                  right={`${i * 18}px`}
+                  zIndex={rightColumn.length - i}
+                  borderRadius="2xl"
                   overflow="hidden"
-                  boxShadow="2xl"
-                  transform={i > 0 ? "rotate(6deg)" : "rotate(0deg)"}
-                  _hover={{ transform: i > 0 ? "rotate(6deg) scale(1.05)" : "scale(1.03)", zIndex: 10 }}
-                  transition="all 0.3s"
-                  onClick={() => { setIndex(i + 3); setOpen(true) }}
+                  boxShadow="0 15px 35px rgba(0,0,0,0.25)"
+                  transform={i === 0 ? "rotate(0deg)" : `rotate(${i % 2 === 0 ? 6 : -7}deg)`}
+                  transition="all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                  _hover={{
+                    transform: `rotate(0deg) scale(1.08) translateY(-12px)`,
+                    zIndex: 100,
+                    boxShadow: "0 25px 50px rgba(0,0,0,0.4)"
+                  }}
+                  cursor="pointer"
+                  onClick={() => { setIndex(i * 2 + 1); setOpen(true) }}
                 >
                   <Image
                     src={src}
-                    alt={`Gallery ${i + 9}`}
-                    w={i === 0 ? "100%" : "85%"}
+                    alt={`Gallery ${i}`}
+                    w={i === 0 ? "100%" : "88%"}
+                    maxW="420px"
                     h="auto"
                     display="block"
                     loading="lazy"
@@ -252,8 +254,8 @@ export default function DashboardPage() {
           index={index}
           slides={lightboxSlides}
           plugins={[Thumbnails]}
-          thumbnails={{ position: "bottom", width: 120, height: 80, gap: 16 }}
-          styles={{ container: { backgroundColor: "rgba(0,0,0,0.95)" } }}
+          thumbnails={{ position: "bottom", width: 130, height: 90, gap: 20, borderRadius: 12 }}
+          styles={{ container: { backgroundColor: "rgba(0,0,0,0.96)" } }}
         />
       </Box>
     </Flex>
