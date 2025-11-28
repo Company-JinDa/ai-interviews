@@ -1,49 +1,69 @@
+// app/api/webhook/route.ts
 import { NextResponse } from "next/server"
-import { db } from "@/app/lib/firebase"
-import { collection, addDoc } from "firebase/firestore"
+import { adminDb } from "@/app/lib/firebaseAdmin"
+import { FieldValue } from "firebase-admin/firestore"
 
-function normalizeContent(str: string) {
+function normalizeContent(str: string): string {
   return str
+    .toString()
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "")           
+    .replace(/\s+/g, "")
     .replace(/đ/g, "d")
-    .replace(/-/g, "")             
-    .replace(/[^a-z0-9_.]/g, "")   
+    .replace(/-/g, "")
+    .replace(/[^a-z0-9_.]/g, "")
+    .replace(/^ibft/, "") // ← QUAN TRỌNG: BỎ "IBFT " Ở ĐẦU
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    console.log("📩 Webhook SePay gửi đến:", body)
+    console.log("WEBHOOK SEPAY GỬI ĐẾN:", JSON.stringify(body, null, 2))
 
-    if (body.transfer_type && body.transfer_type !== "in") {
-      return NextResponse.json({ ignored: true, reason: "Not incoming" }, { status: 200 })
+    // 1. Chỉ xử lý tiền vào
+    const transferType = (body.transferType || body.transfer_type || "").toString().toLowerCase()
+    if (transferType !== "in") {
+      console.log("Không phải tiền vào → bỏ qua")
+      return NextResponse.json({ ok: true })
     }
 
-    const transId = body.transfer_id || body.id || null
-    const amount = Number(body.transfer_amount || body.amount || 0)
-    const rawContent = body.transfer_content || body.content || ""
-    const status = (body.transfer_status || body.status || "").toLowerCase()
+    // 2. Lấy nội dung + số tiền
+    let rawContent = (body.content || body.transfer_content || "").toString()
+    const amount = Number(body.transferAmount || body.transfer_amount || 0)
 
-    if (!rawContent) return NextResponse.json({ ignored: true, reason: "Missing content" }, { status: 200 })
-    if (status !== "success") return NextResponse.json({ ignored: true, reason: "Not success" }, { status: 200 })
+    if (!rawContent || amount <= 0) {
+      console.log("Thiếu nội dung hoặc số tiền → bỏ qua")
+      return NextResponse.json({ ok: true })
+    }
+
+    // 3. BỎ "IBFT " Ở ĐẦU (SePay thêm vào)
+    rawContent = rawContent.replace(/^IBFT\s+/i, "").trim()
+    console.log("NỘI DUNG SAU KHI DỌN:", rawContent)
 
     const cleanContent = normalizeContent(rawContent)
+    console.log("NỘI DUNG CHUẨN HÓA:", cleanContent)
 
-          await addDoc(collection(db, "transactions"), {
-            transId,
-            amount,
-            content: cleanContent,        
-            rawContent: rawContent,       
-            status: "success",
-            createdAt: new Date(),
-          })
+    // 4. LƯU NGAY LẬP TỨC – KHÔNG KIỂM TRA STATUS NỮA!
+    await adminDb.collection("transactions").add({
+      rawContent,
+      content: cleanContent,
+      amount,
+      gateway: body.gateway || "unknown",
+      transactionDate: body.transactionDate || new Date().toISOString(),
+      status: "success",
+      createdAt: FieldValue.serverTimestamp(),
+    })
 
-    console.log("✅ Đã lưu giao dịch Firestore:", { transId, amount, cleanContent })
+    console.log("ĐÃ LƯU GIAO DỊCH THÀNH CÔNG!", { amount, cleanContent })
+
     return NextResponse.json({ success: true }, { status: 200 })
-  } catch (err) {
-    console.error("❌ Webhook error:", err)
-    return NextResponse.json({ error: "Failed to process webhook" }, { status: 500 })
+  } catch (err: any) {
+    console.error("WEBHOOK LỖI CHẾT MẸ:", err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
+}
+
+// Test route
+export async function GET() {
+  return NextResponse.json({ message: "Webhook SePay đang chạy ngon!" })
 }
