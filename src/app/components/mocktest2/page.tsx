@@ -12,94 +12,107 @@ import {
 import { useRouter } from "next/navigation"
 import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
+import { mocktestPackages } from "@/app/lib/mocktestPackages"
 
 export default function MockTest2() {
   const router = useRouter()
   const { lang } = useLang()
   const t = translations[lang]
 
+  const handlePurchase = async (pkg: typeof mocktestPackages.oneMonth) => {
+    try {
+      const content = `AIInterview-MOCK-${pkg.id}-${Date.now()}`
+      
+      const res = await fetch("/api/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: pkg.price,
+          content,
+          packageName: pkg.id,
+          type: "mocktest_pro", // Đánh dấu đây là gói MockTest Pro
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        alert("Tạo QR thất bại, vui lòng thử lại!")
+        return
+      }
+
+      // Dùng chung trang purchaseCompany
+      router.push(
+        `/pages/purchaseCompany?title=${encodeURIComponent(pkg.title)}&price=${pkg.price}&days=${pkg.days}&qr=${encodeURIComponent(data.qr)}&content=${encodeURIComponent(data.content)}&type=mocktest_pro`
+      )
+    } catch (err) {
+      console.error(err)
+      alert("Có lỗi xảy ra, vui lòng thử lại sau")
+    }
+  }
+
   return (
-    <Flex
-      direction="column"
-      minH="100vh"
-      border="2px solid"
-      borderColor="gray.400"
-      p={6}
-      align="center"
-    >
-      {/* Logo + Title */}
-      <HStack
-        spacing={3}
-        cursor="pointer"
-        mb={4}
-        onClick={() => router.push("/auth/dashboard")}
-      >
-        <Image src="/logo.png" alt="logo" boxSize="50px" borderRadius="full" />
-        <Text fontSize="2xl" fontWeight="bold">
-          AI-Interview
-        </Text>
+    <Flex direction="column" minH="100vh" align="center" p={6} bg="gray.50">
+      {/* Header */}
+      <HStack spacing={4} mb={8} cursor="pointer" onClick={() => router.push("/auth/dashboard")}>
+        <Image src="/logo.png" alt="logo" boxSize="60px" borderRadius="full" />
+        <Text fontSize="3xl" fontWeight="extrabold">AI-Interview</Text>
       </HStack>
 
-      <Box w="100%" borderBottom="1px solid black" mb={6}></Box>
+      {/* Title */}
+      <Text fontSize="4xl" fontWeight="bold" mb={4} color="blue.600">
+        Nâng cấp Mock Test Pro
+      </Text>
+      <Text fontSize="lg" color="gray.600" mb={10} maxW="600px" textAlign="center">
+        Trải nghiệm câu hỏi khó hơn, phân tích chi tiết, không giới hạn lượt luyện tập
+      </Text>
 
-      {/* What's Cool Box */}
-      <Box
-        border="1px solid"
-        borderColor="cyan.200"
-        p={6}
-        maxW="700px"
-        w="full"
-        mb={10}
-        textAlign="center"
-      >
-        <Text fontSize="xl" fontWeight="bold" mb={2}>
-          {t.mocktest2.title}
-        </Text>
-        <Text mb={4}>{t.mocktest2.email}</Text>
-
-        <VStack align="start" spacing={3} pl={6}>
-          {t.mocktest2.features.map((feature: string, i: number) => (
-            <HStack key={i}>
-              <Text fontSize="2xl" color="green.500">✔</Text>
-              <Text>{feature}</Text>
-            </HStack>
-          ))}
-        </VStack>
-      </Box>
-
-      {/* Package Options */}
-      <Flex justify="center" gap={10} wrap="wrap">
-        {Object.values(t.mocktest2.packages).map((pkg: any, i: number) => (
+      {/* Packages */}
+      <Flex gap={10} flexWrap="wrap" justify="center">
+        {Object.values(mocktestPackages).map((pkg) => (
           <Box
-            key={i}
-            border="1px solid"
-            borderColor="cyan.200"
-            p={6}
-            w="250px"
+            key={pkg.id}
+            bg="white"
+            p={8}
+            borderRadius="2xl"
+            boxShadow="xl"
+            border="3px solid"
+            borderColor="cyan.400"
+            w="320px"
             textAlign="center"
+            transition="all 0.3s"
+            _hover={{ transform: "translateY(-10px)", boxShadow: "2xl" }}
           >
-            <Text fontWeight="bold" color="blue.600">
-              {pkg.title}{" "}
-              <Text as="span" fontWeight="normal">
-                {pkg.days}
-              </Text>
+            <Text fontSize="2xl" fontWeight="bold" color="cyan.700">
+              {pkg.title}
             </Text>
-            <Text mt={2}>{pkg.price}</Text>
-            <Text fontSize="xl" fontWeight="bold" mt={2}>
-              {pkg.perMonth}
+            <Text fontSize="md" color="gray.600" my={3}>
+              Hiệu lực {pkg.days} ngày
             </Text>
-            
+
+            <Text fontSize="5xl" fontWeight="extrabold" color="blue.600">
+              {lang === "vi" ? `${(pkg.price / 1000).toFixed(0)}k` : `$${pkg.priceUSD}`}
+            </Text>
+            <Text fontSize="sm" color="gray.500" mb={6}>
+              {lang === "vi" ? "đồng" : "USD"} (một lần thanh toán)
+            </Text>
+
             <Button
-              mt={4}
-              colorScheme="blue"
-              variant="outline"
-              onClick={() => router.push(`/pages/purchaseMocktest?package=${pkg.id}&price=${pkg.price}&days=${pkg.days}&title=${encodeURIComponent(pkg.title)}`)}
+              size="lg"
+              colorScheme="cyan"
+              w="full"
+              h="14"
+              fontSize="xl"
+              onClick={() => handlePurchase(pkg)}
             >
-              {t.buyVip}
+              Mua ngay
             </Button>
           </Box>
         ))}
       </Flex>
+
+      <Text mt={12} color="gray.500">
+        Thanh toán qua chuyển khoản QR • Hỗ trợ 24/7
+      </Text>
     </Flex>
   )
 }
