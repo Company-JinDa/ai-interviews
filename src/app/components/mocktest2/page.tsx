@@ -22,7 +22,7 @@ export default function MockTest2() {
 
   const handlePurchase = async (pkg: (typeof mocktestPackages)[keyof typeof mocktestPackages]) => {
     try {
-      const content = `AIInterview-MOCK-${pkg.id}-${Date.now()}`
+     const content = `AIInterviewMOCK${pkg.id}${Date.now()}`
       
       const res = await fetch("/api/qr", {
         method: "POST",

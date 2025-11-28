@@ -4,10 +4,10 @@ export const mocktestPackages = {
     id: "mock_30days",
     title: "Gói 1 tháng",
     days: 30,
-    totalPrice: 290000,        // Giá thực tế thanh toán
-    pricePerMonth: 290000,     // 290k/tháng
-    displayPrice: "290k",      // Hiển thị trên giao diện
-    displayPerMonth: "290k/tháng",
+    totalPrice: 2000,        // Giá thực tế thanh toán
+    pricePerMonth: 2000,     // 290k/tháng
+    displayPrice: "2000k",      // Hiển thị trên giao diện
+    displayPerMonth: "2000k/tháng",
     priceUSD: 12,
   },
   threeMonth: {
@@ -15,9 +15,9 @@ export const mocktestPackages = {
     title: "Gói 3 tháng",
     days: 90,
     totalPrice: 690000,
-    pricePerMonth: Math.round(690000 / 3), // 230k/tháng
+    pricePerMonth: Math.round(690000 / 3), 
     displayPrice: "690k",
-    displayPerMonth: "230k/tháng",         // Đẹp nhất ở đây
+    displayPerMonth: "230k/tháng",         
     priceUSD: 28,
   },
   sixMonth: {
@@ -25,9 +25,9 @@ export const mocktestPackages = {
     title: "Gói 6 tháng",
     days: 180,
     totalPrice: 990000,
-    pricePerMonth: Math.round(990000 / 6), // 165k/tháng
+    pricePerMonth: Math.round(990000 / 6), 
     displayPrice: "990k",
-    displayPerMonth: "165k/tháng",         // Rẻ nhất/tháng → nổi bật
+    displayPerMonth: "165k/tháng",         
     priceUSD: 40,
   },
 } as const

@@ -26,21 +26,19 @@ function PurchaseCompanyContent() {
   const toast = useToast()
   const searchParams = useSearchParams()
 
-  // Lấy params
   const qr = searchParams.get("qr") || ""
   const rawPrice = searchParams.get("price") || "0"
   const title = searchParams.get("title") || "Gói không xác định"
   const content = searchParams.get("content") || ""
-  const type = searchParams.get("type") || "company" // "company" hoặc "mocktest_pro"
+  const type = searchParams.get("type") || "company" 
   const daysParam = searchParams.get("days")
 
   const amount = parseInt(rawPrice)
   const days = daysParam ? parseInt(daysParam) : type === "company" ? 90 : 30
 
-  const [timeLeft, setTimeLeft] = useState(15 * 60) // 15 phút
+  const [timeLeft, setTimeLeft] = useState(15 * 60) 
   const [status, setStatus] = useState<"pending" | "success">("pending")
 
-  // Countdown 15 phút
   useEffect(() => {
     if (timeLeft <= 0) return
     const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000)
@@ -53,12 +51,13 @@ function PurchaseCompanyContent() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/check-transaction?content=${encodeURIComponent(content)}`)
+        const res = await fetch( `/api/check-transaction?content=${encodeURIComponent(content)}`
+                                  )
         const data = await res.json()
 
         if (data.status === "success") {
-          setStatus("success")
-          clearInterval(interval)
+            setStatus("success")
+            clearInterval(interval)
 
           const user = auth.currentUser
           if (!user) {
@@ -67,6 +66,7 @@ function PurchaseCompanyContent() {
           }
 
           const uid = user.uid
+          console.log("POLLING THÀNH CÔNG – BẮT ĐẦU LƯU LỊCH SỬ VÀ MỞ KHÓA", { uid, type, days })
 
           // Tính ngày hết hạn
           const expireDate = new Date()

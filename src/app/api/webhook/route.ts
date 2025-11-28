@@ -6,8 +6,10 @@ function normalizeContent(str: string) {
   return str
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "") // bỏ khoảng trắng
-    .replace(/[^a-z0-9\-_.]/g, "") // chỉ giữ chữ, số, -, _, .
+    .replace(/\s+/g, "")           
+    .replace(/đ/g, "d")
+    .replace(/-/g, "")             
+    .replace(/[^a-z0-9_.]/g, "")   
 }
 
 export async function POST(req: Request) {
@@ -29,13 +31,14 @@ export async function POST(req: Request) {
 
     const cleanContent = normalizeContent(rawContent)
 
-    await addDoc(collection(db, "transactions"), {
-      transId,
-      amount,
-      content: cleanContent,
-      status: "success",
-      createdAt: new Date(),
-    })
+          await addDoc(collection(db, "transactions"), {
+            transId,
+            amount,
+            content: cleanContent,        
+            rawContent: rawContent,       
+            status: "success",
+            createdAt: new Date(),
+          })
 
     console.log("✅ Đã lưu giao dịch Firestore:", { transId, amount, cleanContent })
     return NextResponse.json({ success: true }, { status: 200 })
