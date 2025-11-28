@@ -160,7 +160,7 @@ function PurchaseCompanyContent() {
 
         <Button
           colorScheme="red"
-          onClick={() => router.push("/components/packageCompany")}
+          onClick={() => router.push("/auth/dashboard")}
         >
           Hủy
         </Button>
