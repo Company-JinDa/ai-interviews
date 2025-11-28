@@ -13,7 +13,7 @@ import {
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { auth, db } from "@/app/lib/firebase"
-import { doc, setDoc, serverTimestamp } from "firebase/firestore"
+import { doc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore"
 
 // 👉 Toàn bộ logic cũ của bạn giữ nguyên
 function PurchaseCompanyContent() {
@@ -48,19 +48,37 @@ function PurchaseCompanyContent() {
           setStatus("success")
           clearInterval(interval)
 
-          // ✅ Lưu lịch sử thanh toán
+          // ✅ Lưu lịch sử thanh toán vào collection payment riêng
           const user = auth.currentUser
           if (user) {
             const uid = user.uid
-            const paymentRef = doc(db, "historyPayment", `${uid}_${Date.now()}`)
+            const paymentRef = doc(db, "payment", `${uid}_${Date.now()}`) // 🔹 Collection payment riêng
+            const days = packageName === "threeMonth" ? 90 : 180 // Tính ngày theo gói
+            const expireDate = new Date()
+            expireDate.setDate(expireDate.getDate() + days)
+
+            const expiresAt = new Date()
+            expiresAt.setDate(expiresAt.getDate() + days)
+
             await setDoc(paymentRef, {
               uid,
               packageName,
               amount: parseInt(amount),
               content,
               qr,
+              type: "company",
+              days,
               status: "success",
               createdAt: serverTimestamp(),
+              expiresAt: expiresAt,
+            })
+
+            // 🔹 Cập nhật users: role → company + mở khóa MockTest3
+            await updateDoc(doc(db, "users", uid), {
+              role: "company",
+              hasMocktestPro: true,
+              mocktestProExpiresAt: expireDate,
+              updatedAt: serverTimestamp(),
             })
           }
 

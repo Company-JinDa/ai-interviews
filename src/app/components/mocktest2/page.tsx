@@ -93,7 +93,7 @@ export default function MockTest2() {
               mt={4}
               colorScheme="blue"
               variant="outline"
-              onClick={() => router.push("/pages/purchaseCompany")}
+              onClick={() => router.push(`/pages/purchaseMocktest?package=${pkg.id}&price=${pkg.price}&days=${pkg.days}&title=${encodeURIComponent(pkg.title)}`)}
             >
               {t.buyVip}
             </Button>

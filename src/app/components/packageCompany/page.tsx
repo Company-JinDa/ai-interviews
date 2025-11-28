@@ -30,6 +30,7 @@ export default function PackageCompany() {
           amount: tx.price, // số sạch
           content: `AIInterview-${tx.id}-${Date.now()}`,
           packageName: tx.id,
+          type: "company", // 🔹 Thêm type để phân biệt
         }),
       })
 

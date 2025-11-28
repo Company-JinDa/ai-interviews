@@ -31,6 +31,7 @@ export default function MockTestPage() {
   const [history, setHistory] = useState<any[]>([])
   const [filter, setFilter] = useState<string>("IT")
   const [role, setRole] = useState<string | null>(null)
+  const [hasProAccess, setHasProAccess] = useState(false) // 🔹 State kiểm tra quyền pro (MockTest3)
 
   const { lang } = useLang()
   const t = translations[lang]
@@ -54,16 +55,24 @@ export default function MockTestPage() {
     fetchHistory()
   }, [])
 
-  // 🔹 Check role
+  // 🔹 Check role + quyền pro (hasMocktestPro & expiresAt)
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userRef = doc(db, "users", user.uid)
         const snap = await getDoc(userRef)
         if (snap.exists()) {
-          setRole(snap.data().role || "candidate")
+          const userData = snap.data()
+          setRole(userData.role || "candidate")
+
+          // Kiểm tra quyền pro: hasMocktestPro = true & chưa hết hạn
+          const now = new Date()
+          const expiresAt = userData.mocktestProExpiresAt?.toDate()
+          const isProValid = userData.hasMocktestPro && (expiresAt ? expiresAt > now : true)
+          setHasProAccess(isProValid || userData.role === "company") // Company tự động có quyền
         } else {
           setRole("candidate")
+          setHasProAccess(false)
         }
       } else {
         router.push("/auth/login")
@@ -71,6 +80,16 @@ export default function MockTestPage() {
     })
     return () => unsubscribe()
   }, [router])
+
+  // 🔹 Hàm xử lý click category: Nếu có pro → bay thẳng MockTest3, else → MockTest1
+  const handleCategoryClick = (cat: string) => {
+    setFilter(cat)
+    if (hasProAccess) {
+      router.push(`/components/mocktest3?category=${encodeURIComponent(cat)}`) // Giả sử MockTest3 nhận query param category
+    } else {
+      router.push("/components/mocktest1") // Hoặc mocktest2 tùy flow, nhưng theo yêu cầu bỏ qua 1 & 2 → nhưng mocktest1 là gì? Giả sử là intro
+    }
+  }
 
   return (
     <Flex h="100vh" border="1px solid" borderColor="gray.300">
@@ -189,10 +208,7 @@ export default function MockTestPage() {
               key={idx}
               variant="outline"
               colorScheme="teal"
-              onClick={() => {
-                setFilter(cat)
-                router.push("/components/mocktest1")
-              }}
+              onClick={() => handleCategoryClick(cat)} // 🔹 Sử dụng hàm mới
             >
               {cat}
             </Button>
