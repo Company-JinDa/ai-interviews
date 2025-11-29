@@ -45,6 +45,11 @@ export async function POST(req: Request) {
     console.log("SỐ TIỀN:", amount)
 
     // 4. LƯU NGAY – KHÔNG KIỂM TRA STATUS NỮA!!!
+    if (!adminDb) {
+      console.error("adminDb is not initialized")
+      return NextResponse.json({ error: "adminDb is not initialized" }, { status: 500 })
+    }
+
     await adminDb.collection("transactions").add({
       rawContent,
       content: cleanContent,
