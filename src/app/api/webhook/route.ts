@@ -1,6 +1,6 @@
 // app/api/webhook/route.ts
 import { NextResponse } from "next/server"
-import { adminDb } from "@/app/lib/firebaseAdmin"
+import { getAdminDb } from "@/app/lib/firebaseAdmin"
 import { FieldValue } from "firebase-admin/firestore"
 
 function normalizeContent(str: string): string {
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     console.log("SỐ TIỀN:", amount)
 
     // 4. LƯU NGAY – KHÔNG KIỂM TRA STATUS NỮA!!!
-    await adminDb.collection("transactions").add({
+    await getAdminDb().collection("transactions").add({
       rawContent,
       content: cleanContent,
       amount,

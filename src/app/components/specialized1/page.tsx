@@ -21,13 +21,13 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { signOut, onAuthStateChanged } from "firebase/auth"
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore"
 import { auth, db } from "@/app/lib/firebase"
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 
 // import i18n
 import { useLang } from "@/app/context/LangContext/LangContext"
 import { translations } from "@/app/lib/translations"
 
-export default function Specialized1Page() {
+function Specialized1Content() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialCategory = searchParams?.get("category") || "Information Technology"
@@ -396,5 +396,13 @@ export default function Specialized1Page() {
         </Flex>
       </Box>
     </Flex>
+  )
+}
+
+export default function Specialized1Page() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Specialized1Content />
+    </Suspense>
   )
 }

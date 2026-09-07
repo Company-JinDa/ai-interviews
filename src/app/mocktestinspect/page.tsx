@@ -1,7 +1,7 @@
 // src/app/mocktestinspect/page.tsx
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import {
   Box, Flex, Text, Button, VStack, HStack, Circle, Tabs, TabList, Tab, TabPanels, TabPanel,
   Center, Spinner, useToast, Image, Badge, IconButton, Progress
@@ -12,7 +12,7 @@ import { db, auth } from "@/app/lib/firebase";
 import { addDoc, collection, updateDoc, serverTimestamp } from "firebase/firestore";
 import confetti from "canvas-confetti";
 
-export default function MockTestInspect() {
+function MockTestInspectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -575,5 +575,13 @@ export default function MockTestInspect() {
         </Box>
       </Flex>
     </Box>
+  );
+}
+
+export default function MockTestInspect() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <MockTestInspectContent />
+    </Suspense>
   );
 }

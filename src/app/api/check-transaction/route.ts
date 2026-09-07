@@ -3,6 +3,8 @@ import { NextResponse } from "next/server"
 import { db } from "@/app/lib/firebase"
 import { collection, query, where, getDocs } from "firebase/firestore"
 
+export const dynamic = "force-dynamic"
+
 function normalizeContent(str: string) {
   return str
     .trim()

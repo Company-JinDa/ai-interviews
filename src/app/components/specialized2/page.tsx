@@ -20,7 +20,7 @@ import {
 import { FaHome, FaMicrophone, FaPlay } from "react-icons/fa";
 import { MdDirectionsBike, MdOutlineKeyboardArrowRight } from "react-icons/md";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import { db, auth } from "@/app/lib/firebase";
 import {
   addDoc,
@@ -54,7 +54,7 @@ interface InterviewData {
   finished: boolean;
 }
 
-export default function Specialized2() {
+function Specialized2Content() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
@@ -732,5 +732,13 @@ export default function Specialized2() {
         </Box>
       </Flex>
     </Box>
+  );
+}
+
+export default function Specialized2() {
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Specialized2Content />
+    </Suspense>
   );
 }
