@@ -17,7 +17,7 @@ import {
 } from "@chakra-ui/react"
 import { FcGoogle } from "react-icons/fc"
 import NextLink from "next/link"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { auth, db } from "@/app/lib/firebase" // db = getFirestore()
 import {
@@ -33,6 +33,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const googleLoginInProgress = useRef(false)
   const router = useRouter()
 
   // Hàm lưu user vào Firestore nếu chưa có
@@ -62,20 +63,29 @@ export default function LoginPage() {
       const credential = await signInWithEmailAndPassword(auth, email, password)
       await saveUserToFirestore(credential.user) // lưu user vào firestore
       router.push("/auth/dashboard") 
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to log in")
     } finally {
       setLoading(false)
     }
   }
   const handleGoogleLogin = async () => {
+    if (loading || googleLoginInProgress.current) return
+
+    googleLoginInProgress.current = true
+    setLoading(true)
+    setError(null)
+
     try {
       const provider = new GoogleAuthProvider()
       const credential = await signInWithPopup(auth, provider)
       await saveUserToFirestore(credential.user) // lưu user vào firestore
       router.push("/auth/dashboard") 
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to log in with Google")
+    } finally {
+      googleLoginInProgress.current = false
+      setLoading(false)
     }
   }
   return (
@@ -151,7 +161,8 @@ export default function LoginPage() {
           colorScheme="cyan"
           mb={4}
           onClick={handleLogin}
-          isLoading={loading}
+          isLoading={loading && !googleLoginInProgress.current}
+          isDisabled={loading}
         >
           Continue
         </Button>
@@ -175,6 +186,8 @@ export default function LoginPage() {
           variant="outline"
           leftIcon={<FcGoogle />}
           onClick={handleGoogleLogin}
+          isLoading={loading && googleLoginInProgress.current}
+          isDisabled={loading}
         >
           Continue with Google
         </Button>
